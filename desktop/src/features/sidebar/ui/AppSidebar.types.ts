@@ -113,4 +113,7 @@ export type AppSidebarProps = {
   starredChannelIds?: ReadonlySet<string>;
   onStarChannel?: (channelId: string) => void;
   onUnstarChannel?: (channelId: string) => void;
+  unreadCountChannelIds?: ReadonlySet<string>;
+  onShowUnreadCount?: (channelId: string) => void;
+  onHideUnreadCount?: (channelId: string) => void;
 };

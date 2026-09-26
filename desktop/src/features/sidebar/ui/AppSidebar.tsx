@@ -143,6 +143,9 @@ export function AppSidebar({
   starredChannelIds,
   onStarChannel,
   onUnstarChannel,
+  unreadCountChannelIds,
+  onShowUnreadCount,
+  onHideUnreadCount,
 }: AppSidebarProps) {
   const activeWorkingByChannelId = useActiveWorkingChannelsById();
   const { status: updateStatus } = useUpdaterContext();
@@ -615,6 +618,10 @@ export function AppSidebar({
                       starredChannelIds={starredChannelIds}
                       onStarChannel={onStarChannel}
                       onUnstarChannel={onUnstarChannel}
+                      unreadChannelCounts={unreadChannelCounts}
+                      unreadCountChannelIds={unreadCountChannelIds}
+                      onShowUnreadCount={onShowUnreadCount}
+                      onHideUnreadCount={onHideUnreadCount}
                       onDeleteChannel={requestDeleteChannel}
                       onLeaveChannel={requestLeaveChannel}
                     />
@@ -684,6 +691,10 @@ export function AppSidebar({
                         starredChannelIds={starredChannelIds}
                         onStarChannel={onStarChannel}
                         onUnstarChannel={onUnstarChannel}
+                        unreadChannelCounts={unreadChannelCounts}
+                        unreadCountChannelIds={unreadCountChannelIds}
+                        onShowUnreadCount={onShowUnreadCount}
+                        onHideUnreadCount={onHideUnreadCount}
                         onDeleteChannel={requestDeleteChannel}
                         onLeaveChannel={requestLeaveChannel}
                       />
@@ -723,6 +734,10 @@ export function AppSidebar({
                       starredChannelIds={starredChannelIds}
                       onStarChannel={onStarChannel}
                       onUnstarChannel={onUnstarChannel}
+                      unreadChannelCounts={unreadChannelCounts}
+                      unreadCountChannelIds={unreadCountChannelIds}
+                      onShowUnreadCount={onShowUnreadCount}
+                      onHideUnreadCount={onHideUnreadCount}
                       onDeleteChannel={requestDeleteChannel}
                       onLeaveChannel={requestLeaveChannel}
                     />

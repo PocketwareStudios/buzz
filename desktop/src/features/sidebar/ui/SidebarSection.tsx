@@ -60,10 +60,13 @@ function UnreadCountBadge({
   channelName,
   className,
   count,
+  unit = "notification",
 }: {
   channelName: string;
   className?: string;
   count: number;
+  /** What is being counted, for the screen-reader label. */
+  unit?: "notification" | "message";
 }) {
   return (
     <span
@@ -76,7 +79,8 @@ function UnreadCountBadge({
       {formatUnreadCount(count)}
       <span className="sr-only">
         {" "}
-        unread notification{count === 1 ? "" : "s"}
+        unread {unit}
+        {count === 1 ? "" : "s"}
       </span>
     </span>
   );
@@ -250,6 +254,7 @@ export function ChannelMenuButton({
   hasUnread,
   activeWorking,
   isMuted,
+  unreadCount,
   dmParticipants,
   presenceStatus,
   onSelectChannel,
@@ -260,6 +265,11 @@ export function ChannelMenuButton({
   hasUnread: boolean;
   activeWorking?: ActiveChannelTurnSummary;
   isMuted?: boolean;
+  /**
+   * Unread messages to show as a number instead of the unread dot, for a
+   * channel the user opted in to counts. Leave undefined to show the dot.
+   */
+  unreadCount?: number;
   dmParticipants?: SidebarDmParticipant[];
   presenceStatus?: PresenceStatus;
   onSelectChannel: (channelId: string) => void;
@@ -356,7 +366,14 @@ export function ChannelMenuButton({
           )}
         />
       ) : null}
-      {hasThreadUnread ? (
+      {unreadCount !== undefined && unreadCount > 0 ? (
+        <UnreadCountBadge
+          channelName={channel.name}
+          className="ml-auto"
+          count={unreadCount}
+          unit="message"
+        />
+      ) : hasThreadUnread ? (
         <UnreadDotBadge channelName={channel.name} className="ml-auto" />
       ) : null}
     </SidebarMenuButton>

@@ -6,6 +6,8 @@ import {
   CheckCircle2,
   CircleDot,
   Copy,
+  ListOrdered,
+  ListX,
   LogOut,
   LoaderCircle,
   Plus,
@@ -144,6 +146,7 @@ export function ChannelContextMenuItems({
   hasUnread,
   isMuted,
   isStarred,
+  showsUnreadCount,
   sections,
   assignments,
   onMarkChannelRead,
@@ -152,6 +155,8 @@ export function ChannelContextMenuItems({
   onUnmuteChannel,
   onStarChannel,
   onUnstarChannel,
+  onShowUnreadCount,
+  onHideUnreadCount,
   onAssignChannel,
   onUnassignChannel,
   onCreateSectionForChannel,
@@ -162,6 +167,7 @@ export function ChannelContextMenuItems({
   hasUnread: boolean;
   isMuted?: boolean;
   isStarred?: boolean;
+  showsUnreadCount?: boolean;
   sections?: ChannelSection[];
   assignments?: Record<string, string>;
   onMarkChannelRead?: (
@@ -173,6 +179,8 @@ export function ChannelContextMenuItems({
   onUnmuteChannel?: (channelId: string) => void;
   onStarChannel?: (channelId: string) => void;
   onUnstarChannel?: (channelId: string) => void;
+  onShowUnreadCount?: (channelId: string) => void;
+  onHideUnreadCount?: (channelId: string) => void;
   onAssignChannel?: (channelId: string, sectionId: string) => void;
   onUnassignChannel?: (channelId: string) => void;
   onCreateSectionForChannel?: (channelId: string) => void;
@@ -225,6 +233,10 @@ export function ChannelContextMenuItems({
     ? Boolean(onMarkChannelRead)
     : Boolean(onMarkChannelUnread);
   const showMuteToggle = Boolean(onMuteChannel && onUnmuteChannel);
+  // DMs always show their count; the opt-in is for ordinary channels.
+  const showUnreadCountToggle =
+    channel.channelType !== "dm" &&
+    Boolean(onShowUnreadCount && onHideUnreadCount);
   const showMove = Boolean(
     sections &&
       assignments &&
@@ -275,7 +287,9 @@ export function ChannelContextMenuItems({
           <span>Mark unread</span>
         </ContextMenuItem>
       ) : null}
-      {showMuteToggle || showStar ? <ContextMenuSeparator /> : null}
+      {showMuteToggle || showStar || showUnreadCountToggle ? (
+        <ContextMenuSeparator />
+      ) : null}
       {showMuteToggle ? (
         isMuted ? (
           <ContextMenuItem
@@ -319,6 +333,31 @@ export function ChannelContextMenuItems({
               <Star className="h-4 w-4" />
             </ContextMenuIconSlot>
             <span>Star channel</span>
+          </ContextMenuItem>
+        )
+      ) : null}
+      {showUnreadCountToggle ? (
+        showsUnreadCount ? (
+          <ContextMenuItem
+            onSelect={() =>
+              deferMenuAction(() => onHideUnreadCount?.(channel.id))
+            }
+          >
+            <ContextMenuIconSlot>
+              <ListX className="h-4 w-4" />
+            </ContextMenuIconSlot>
+            <span>Hide unread count</span>
+          </ContextMenuItem>
+        ) : (
+          <ContextMenuItem
+            onSelect={() =>
+              deferMenuAction(() => onShowUnreadCount?.(channel.id))
+            }
+          >
+            <ContextMenuIconSlot>
+              <ListOrdered className="h-4 w-4" />
+            </ContextMenuIconSlot>
+            <span>Show unread count</span>
           </ContextMenuItem>
         )
       ) : null}
