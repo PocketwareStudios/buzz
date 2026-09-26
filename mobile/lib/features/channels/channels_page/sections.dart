@@ -7,6 +7,9 @@ class _CustomChannelSection extends StatelessWidget {
   final List<Channel> channels;
   final Set<String> unreadChannelIds;
   final Set<String> mutedChannelIds;
+
+  /// Counts to show on opted-in, unmuted rows (see [channelRowUnreadCount]).
+  final Map<String, int> rowUnreadCounts;
   final String? currentPubkey;
   final bool expanded;
   final bool isFirst;
@@ -27,6 +30,7 @@ class _CustomChannelSection extends StatelessWidget {
     required this.channels,
     required this.unreadChannelIds,
     required this.mutedChannelIds,
+    required this.rowUnreadCounts,
     required this.currentPubkey,
     required this.expanded,
     required this.isFirst,
@@ -72,6 +76,7 @@ class _CustomChannelSection extends StatelessWidget {
                   channel: channel,
                   isUnread: unreadChannelIds.contains(channel.id),
                   isMuted: mutedChannelIds.contains(channel.id),
+                  unreadCount: rowUnreadCounts[channel.id],
                   currentPubkey: currentPubkey,
                   onTap: () => onSelectChannel(channel),
                   onMarkRead: () => onMarkChannelRead(channel),
@@ -379,6 +384,9 @@ class _ChannelSection extends StatelessWidget {
   final bool showTopDivider;
   final Set<String> unreadChannelIds;
   final Set<String> mutedChannelIds;
+
+  /// Counts to show on opted-in, unmuted rows (see [channelRowUnreadCount]).
+  final Map<String, int> rowUnreadCounts;
   final String? currentPubkey;
   final String emptyLabel;
   final ChannelSortMode? sortMode;
@@ -394,6 +402,7 @@ class _ChannelSection extends StatelessWidget {
     required this.showTopDivider,
     required this.unreadChannelIds,
     required this.mutedChannelIds,
+    required this.rowUnreadCounts,
     required this.currentPubkey,
     required this.emptyLabel,
     this.sortMode,
@@ -441,6 +450,7 @@ class _ChannelSection extends StatelessWidget {
                     channel: channel,
                     isUnread: unreadChannelIds.contains(channel.id),
                     isMuted: mutedChannelIds.contains(channel.id),
+                    unreadCount: rowUnreadCounts[channel.id],
                     currentPubkey: currentPubkey,
                     onTap: () => onSelectChannel(channel),
                     onMarkRead: null,

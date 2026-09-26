@@ -26,6 +26,7 @@ import 'channel_management_provider.dart';
 import 'channel_mutes/channel_mutes_provider.dart';
 import 'channel_sections/channel_sections_provider.dart';
 import 'channel_stars/channel_stars_provider.dart';
+import 'channel_unread_counts/channel_unread_counts_provider.dart';
 import 'channels_provider.dart';
 import 'manage_channel_sheet.dart';
 import 'members_sheet.dart';
@@ -82,6 +83,14 @@ class ChannelActionsSheet extends HookConsumerWidget {
     final isMuted =
         ref.watch(channelMutesProvider).store.channels[channel.id]?.muted ==
         true;
+    final showsUnreadCount =
+        !channel.isDm &&
+        ref
+                .watch(channelUnreadCountsProvider)
+                .store
+                .channels[channel.id]
+                ?.enabled ==
+            true;
     final isStarred =
         !channel.isDm &&
         ref.watch(channelStarsProvider).store.channels[channel.id]?.starred ==
@@ -208,6 +217,30 @@ class ChannelActionsSheet extends HookConsumerWidget {
                       : notifier.muteChannel(channel.id);
                 },
               ),
+              // DMs always show their count; the opt-in is for channels.
+              if (!channel.isDm)
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(
+                    showsUnreadCount
+                        ? LucideIcons.listX
+                        : LucideIcons.listOrdered,
+                  ),
+                  title: Text(
+                    showsUnreadCount
+                        ? 'Hide unread count'
+                        : 'Show unread count',
+                  ),
+                  onTap: () {
+                    close();
+                    final notifier = ref.read(
+                      channelUnreadCountsProvider.notifier,
+                    );
+                    showsUnreadCount
+                        ? notifier.hideUnreadCount(channel.id)
+                        : notifier.showUnreadCount(channel.id);
+                  },
+                ),
               if (!channel.isDm)
                 ListTile(
                   contentPadding: EdgeInsets.zero,

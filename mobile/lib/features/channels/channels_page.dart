@@ -45,6 +45,8 @@ import 'channel_sections/channel_sections_storage.dart';
 import 'channel_sort/channel_sort_provider.dart';
 import 'channel_sort/channel_sort_storage.dart';
 import 'channel_stars/channel_stars_provider.dart';
+import 'channel_unread_counts/channel_unread_counts_provider.dart';
+import 'channel_unread_counts/channel_unread_counts_storage.dart';
 import 'channels_provider.dart';
 import '../../shared/read_state/deferred_read_state_update.dart';
 import '../../shared/read_state/read_state_format.dart';
@@ -108,7 +110,11 @@ const double _kHeaderFrostMaxBlurSigma = 23.12;
 class _UnreadChannelState {
   final Set<String> ids;
 
-  const _UnreadChannelState({required this.ids});
+  /// Unread message count per channel in [ids] (forced-unread channels
+  /// without observed events are absent).
+  final Map<String, int> counts;
+
+  const _UnreadChannelState({required this.ids, this.counts = const {}});
 }
 
 _UnreadChannelState _computeUnreadChannelState({
@@ -124,6 +130,7 @@ _UnreadChannelState _computeUnreadChannelState({
   final observedEventsByChannel =
       channelsNotifier.observedUnreadEventsByChannel;
   final ids = <String>{};
+  final counts = <String, int>{};
 
   for (final channel in channels) {
     if (readState.locallyForcedChannelIds.contains(channel.id)) {
@@ -153,9 +160,10 @@ _UnreadChannelState _computeUnreadChannelState({
     if (unreadCount == 0) continue;
 
     ids.add(channel.id);
+    counts[channel.id] = unreadCount;
   }
 
-  return _UnreadChannelState(ids: ids);
+  return _UnreadChannelState(ids: ids, counts: counts);
 }
 
 class ChannelsPage extends HookConsumerWidget {
