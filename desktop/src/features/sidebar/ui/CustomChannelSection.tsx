@@ -42,6 +42,7 @@ import {
   SidebarMenuItem,
 } from "@/shared/ui/sidebar";
 import { ChannelMenuButton } from "@/features/sidebar/ui/SidebarSection";
+import { channelRowUnreadCount } from "@/features/sidebar/lib/channelRowUnreadCount";
 import { ChannelContextMenuItems } from "@/features/sidebar/ui/ChannelContextMenu";
 import { deferMenuAction } from "@/features/sidebar/ui/sidebarMenuHelpers";
 import {
@@ -370,6 +371,10 @@ export function ChannelGroupSection({
   starredChannelIds,
   onStarChannel,
   onUnstarChannel,
+  unreadChannelCounts,
+  unreadCountChannelIds,
+  onShowUnreadCount,
+  onHideUnreadCount,
   onDeleteChannel,
   onLeaveChannel,
 }: {
@@ -419,6 +424,10 @@ export function ChannelGroupSection({
   starredChannelIds?: ReadonlySet<string>;
   onStarChannel?: (channelId: string) => void;
   onUnstarChannel?: (channelId: string) => void;
+  unreadChannelCounts?: ReadonlyMap<string, number>;
+  unreadCountChannelIds?: ReadonlySet<string>;
+  onShowUnreadCount?: (channelId: string) => void;
+  onHideUnreadCount?: (channelId: string) => void;
   onDeleteChannel?: (channel: Channel) => void;
   onLeaveChannel?: (channel: Channel) => void;
 }) {
@@ -439,6 +448,11 @@ export function ChannelGroupSection({
                       activeWorking={activeWorkingByChannelId?.get(channel.id)}
                       hasUnread={unreadChannelIds.has(channel.id)}
                       isMuted={mutedChannelIds?.has(channel.id)}
+                      unreadCount={channelRowUnreadCount(channel.id, {
+                        unreadCountChannelIds,
+                        mutedChannelIds,
+                        unreadChannelCounts,
+                      })}
                       isActive={
                         isActiveChannel && selectedChannelId === channel.id
                       }
@@ -451,6 +465,11 @@ export function ChannelGroupSection({
                     activeWorking={activeWorkingByChannelId?.get(channel.id)}
                     hasUnread={unreadChannelIds.has(channel.id)}
                     isMuted={mutedChannelIds?.has(channel.id)}
+                    unreadCount={channelRowUnreadCount(channel.id, {
+                      unreadCountChannelIds,
+                      mutedChannelIds,
+                      unreadChannelCounts,
+                    })}
                     isActive={
                       isActiveChannel && selectedChannelId === channel.id
                     }
@@ -465,6 +484,7 @@ export function ChannelGroupSection({
                 hasUnread={unreadChannelIds.has(channel.id)}
                 isMuted={mutedChannelIds?.has(channel.id)}
                 isStarred={starredChannelIds?.has(channel.id)}
+                showsUnreadCount={unreadCountChannelIds?.has(channel.id)}
                 sections={sections}
                 assignments={assignments}
                 onMarkChannelRead={onMarkChannelRead}
@@ -473,6 +493,8 @@ export function ChannelGroupSection({
                 onUnmuteChannel={onUnmuteChannel}
                 onStarChannel={onStarChannel}
                 onUnstarChannel={onUnstarChannel}
+                onShowUnreadCount={onShowUnreadCount}
+                onHideUnreadCount={onHideUnreadCount}
                 onAssignChannel={onAssignChannel}
                 onUnassignChannel={onUnassignChannel}
                 onCreateSectionForChannel={onCreateSectionForChannel}
@@ -570,6 +592,10 @@ export function CustomChannelSection({
   starredChannelIds,
   onStarChannel,
   onUnstarChannel,
+  unreadChannelCounts,
+  unreadCountChannelIds,
+  onShowUnreadCount,
+  onHideUnreadCount,
   onDeleteChannel,
   onLeaveChannel,
 }: {
@@ -609,6 +635,10 @@ export function CustomChannelSection({
   starredChannelIds?: ReadonlySet<string>;
   onStarChannel?: (channelId: string) => void;
   onUnstarChannel?: (channelId: string) => void;
+  unreadChannelCounts?: ReadonlyMap<string, number>;
+  unreadCountChannelIds?: ReadonlySet<string>;
+  onShowUnreadCount?: (channelId: string) => void;
+  onHideUnreadCount?: (channelId: string) => void;
   onDeleteChannel?: (channel: Channel) => void;
   onLeaveChannel?: (channel: Channel) => void;
 }) {
@@ -739,6 +769,11 @@ export function CustomChannelSection({
                                 )}
                                 hasUnread={unreadChannelIds.has(channel.id)}
                                 isMuted={mutedChannelIds?.has(channel.id)}
+                                unreadCount={channelRowUnreadCount(channel.id, {
+                                  unreadCountChannelIds,
+                                  mutedChannelIds,
+                                  unreadChannelCounts,
+                                })}
                                 isActive={
                                   isActiveChannel &&
                                   selectedChannelId === channel.id
@@ -754,6 +789,9 @@ export function CustomChannelSection({
                             hasUnread={unreadChannelIds.has(channel.id)}
                             isMuted={mutedChannelIds?.has(channel.id)}
                             isStarred={starredChannelIds?.has(channel.id)}
+                            showsUnreadCount={unreadCountChannelIds?.has(
+                              channel.id,
+                            )}
                             sections={sections}
                             assignments={assignments}
                             onMarkChannelRead={onMarkChannelRead}
@@ -762,6 +800,8 @@ export function CustomChannelSection({
                             onUnmuteChannel={onUnmuteChannel}
                             onStarChannel={onStarChannel}
                             onUnstarChannel={onUnstarChannel}
+                            onShowUnreadCount={onShowUnreadCount}
+                            onHideUnreadCount={onHideUnreadCount}
                             onAssignChannel={onAssignChannel}
                             onUnassignChannel={onUnassignChannel}
                             onCreateSectionForChannel={
