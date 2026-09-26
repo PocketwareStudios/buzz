@@ -31,10 +31,10 @@ test("destroy: cancels pending publish without flushing to the relay", () => {
   const restore = installFakeWindow(fw);
   try {
     const manager = new ChannelStarSyncManager("pk-test", RELAY);
-    manager.publishStars(makeStore({ ch1: { starred: true, updatedAt: 100 } }));
+    manager.publish(makeStore({ ch1: { starred: true, updatedAt: 100 } }));
     manager.destroy();
     assert.equal(publishCalls.length, 0, "no publish after destroy");
-    assert.equal(manager.getPendingStarStore(), null);
+    assert.equal(manager.getPendingStore(), null);
   } finally {
     restore();
     mock.reset();
@@ -60,7 +60,7 @@ test("destroy: aborts in-flight doPublish after fetchOwnBlobBeforePublish resolv
   const restore = installFakeWindow(fw);
   try {
     const manager = new ChannelStarSyncManager("pk-race", RELAY);
-    manager.publishStars(makeStore({ ch1: { starred: true, updatedAt: 100 } }));
+    manager.publish(makeStore({ ch1: { starred: true, updatedAt: 100 } }));
     fw._fireTimer();
     manager.destroy();
     releaseFetch();
@@ -103,7 +103,7 @@ test("revert-fix: fetch failed (error) does not trigger seed-publish via bootstr
       makeStore({ ch1: { starred: true, updatedAt: 1 } }),
     );
     assert.equal(result.action, "hold");
-    assert.equal(manager.getPendingStarStore(), null);
+    assert.equal(manager.getPendingStore(), null);
   } finally {
     restore();
     mock.reset();
@@ -133,7 +133,7 @@ test("revert-fix: absent fetch with prior watermark blocks seed-publish via boot
       makeStore({ ch1: { starred: true, updatedAt: 1 } }),
     );
     assert.equal(result.action, "hold");
-    assert.equal(manager.getPendingStarStore(), null);
+    assert.equal(manager.getPendingStore(), null);
   } finally {
     restore();
     mock.reset();
@@ -158,7 +158,7 @@ test("revert-fix: absent fetch with zero watermark seeds via bootstrap (first-sy
       makeStore({ ch1: { starred: true, updatedAt: 1 } }),
     );
     assert.equal(result.action, "hold");
-    assert.ok(manager.getPendingStarStore() !== null);
+    assert.ok(manager.getPendingStore() !== null);
   } finally {
     restore();
     mock.reset();
@@ -192,7 +192,7 @@ test("revert-fix: relay-A watermark does not suppress first-sync seed on relay-B
     );
     assert.equal(result.action, "hold");
     assert.ok(
-      managerB.getPendingStarStore() !== null,
+      managerB.getPendingStore() !== null,
       "first-sync seed on relay B must not be blocked by relay A watermark",
     );
   } finally {

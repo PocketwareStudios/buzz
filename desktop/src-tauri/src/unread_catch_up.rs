@@ -491,6 +491,45 @@ mod tests {
         }
     }
 
+    /// A stream channel that received many ordinary posts while the app was
+    /// closed must come back with one observed event per unread post, not just
+    /// the newest. Channel unread counts are built from these events.
+    #[test]
+    fn cold_start_returns_every_unread_top_level_post() {
+        let req = request();
+        let channel = CatchUpChannel {
+            id: "news".into(),
+            channel_type: "stream".into(),
+            name: "News".into(),
+            read_at: Some(100),
+        };
+        let mut events: Vec<EventView> = (1..=30)
+            .map(|n| event(&format!("post-{n}"), "feed-bot", 100 + n, &[&["h", "news"]]))
+            .collect();
+        events.push(event("already-read", "feed-bot", 100, &[&["h", "news"]]));
+        events.push(event("own-post", "self", 140, &[&["h", "news"]]));
+        let fetched = vec![FetchedChannel {
+            order: 0,
+            channel,
+            events,
+        }];
+        let result = classify_batch(&req, fetched, &HashMap::new());
+        let ChannelResult::Success {
+            observed_events,
+            max_trigger,
+            ..
+        } = &result[0]
+        else {
+            panic!("expected success")
+        };
+        assert_eq!(observed_events.len(), 30);
+        assert!(observed_events.iter().all(|event| event.root_id.is_none()));
+        assert!(observed_events
+            .iter()
+            .all(|event| !event.counts_toward_badge));
+        assert_eq!(*max_trigger, 130);
+    }
+
     #[test]
     fn pass_one_history_changes_later_classification() {
         let req = request();

@@ -82,6 +82,7 @@ import { requestFocusedThreadClose } from "@/features/channels/focusedThreadClos
 import { CommunityRail } from "@/features/sidebar/ui/CommunityRail";
 import { useChannelMutes } from "@/features/sidebar/lib/useChannelMutes";
 import { useChannelStars } from "@/features/sidebar/lib/useChannelStars";
+import { useChannelUnreadCounts } from "@/features/sidebar/lib/useChannelUnreadCounts";
 import { useCommunities } from "@/features/communities/useCommunities";
 import {
   consumePendingCommunityRestore,
@@ -199,6 +200,11 @@ export function AppShell() {
     identityQuery.data?.pubkey,
     communitiesHook.activeCommunity?.relayUrl,
   );
+  const { unreadCountChannelIds, showUnreadCount, hideUnreadCount } =
+    useChannelUnreadCounts(
+      identityQuery.data?.pubkey,
+      communitiesHook.activeCommunity?.relayUrl,
+    );
   usePersonaSync(
     identityQuery.data?.pubkey,
     communitiesHook.activeCommunity?.relayUrl,
@@ -936,6 +942,9 @@ export function AppShell() {
                           starredChannelIds={starredChannelIds}
                           onStarChannel={starChannel}
                           onUnstarChannel={unstarChannel}
+                          unreadCountChannelIds={unreadCountChannelIds}
+                          onShowUnreadCount={showUnreadCount}
+                          onHideUnreadCount={hideUnreadCount}
                         />
                       ) : null}
                       <TerminalContextOverrideProvider
