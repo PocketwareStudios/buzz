@@ -912,3 +912,63 @@ test("native: an ingested event reaches the hook's unread counts, not just the p
     rig.restore();
   }
 });
+
+test("native: a cold-start catch-up of many ordinary posts counts every unread post", async () => {
+  installFreshStorage();
+  const CHANNEL = "channel-news";
+  const POSTS = 30;
+  let harness;
+  const rig = installNativeRig({
+    // What unread_catch_up returns for a stream channel that received 30
+    // top-level posts from someone else while the app was closed.
+    catchUpChannels: (request) =>
+      request.channels.map((channel) => ({
+        status: "success",
+        channelId: channel.id,
+        observedEvents:
+          channel.id === CHANNEL
+            ? Array.from({ length: POSTS }, (_, index) => ({
+                id: `post-${index + 1}`,
+                createdAt: NOW_S - POSTS + index,
+                rootId: null,
+                highPriority: false,
+                countsTowardBadge: false,
+                countsTowardAppBadge: false,
+              }))
+            : [],
+        maxTrigger: channel.id === CHANNEL ? NOW_S - 1 : 0,
+        activityRows: [],
+        discovered: { participated: [], authored: [], mentioned: [] },
+      })),
+  });
+  try {
+    harness = await mountUnreadChannels({
+      pubkey: "pk-news",
+      relay: RELAY,
+      channels: [{ id: CHANNEL, name: "news", channelType: "stream" }],
+      relayClient: makeStubRelayClient(),
+    });
+    await settle();
+    await settle();
+
+    assert.equal(
+      rig.requests("unread_catch_up").length >= 1,
+      true,
+      "catch-up must have run for this assertion to mean anything",
+    );
+    assert.equal(
+      harness.result.unreadChannelCounts.get(CHANNEL),
+      POSTS,
+      "every unread post from the catch-up must be counted, not only the newest",
+    );
+    assert.ok(harness.result.topLevelUnreadChannelIds.has(CHANNEL));
+    assert.equal(
+      harness.result.highPriorityUnreadChannelIds.has(CHANNEL),
+      false,
+      "ordinary posts must not make the channel high-priority",
+    );
+  } finally {
+    await harness?.unmount();
+    rig.restore();
+  }
+});
