@@ -123,6 +123,9 @@ type MessageTimelineProps = {
   splitThreadPanelOpen?: boolean;
   /** Event id of the oldest unread top-level message at channel open, or null. */
   firstUnreadMessageId?: string | null;
+  /** Where opening the channel resumes reading (the oldest unread post when
+   *  there was a read position), or null to start at the newest post. */
+  resumeMessageId?: string | null;
   /** Count of unread top-level messages at channel open. */
   unreadCount?: number;
   /** Per-thread unread counts keyed by thread root id. */
@@ -213,6 +216,7 @@ const MessageTimelineBase = React.forwardRef<
     onTargetReached,
     splitThreadPanelOpen = false,
     firstUnreadMessageId = null,
+    resumeMessageId: resumeMessageIdProp = null,
     unreadCount = 0,
     threadUnreadCounts,
   }: MessageTimelineProps,
@@ -351,6 +355,13 @@ const MessageTimelineBase = React.forwardRef<
     scrollElementRef: activeScrollContainerRef,
   });
 
+  // Where a freshly opened channel starts when nothing else owns the viewport:
+  // the oldest unread post (open-time frontier), so reading resumes instead of
+  // landing on the newest post. Deep links and search keep their own target.
+  const resumeMessageId =
+    targetMessageId === null && searchActiveMessageId === null
+      ? resumeMessageIdProp
+      : null;
   const {
     highlightedMessageId,
     isAtBottom,
@@ -359,11 +370,13 @@ const MessageTimelineBase = React.forwardRef<
     scrollToBottom,
     scrollToBottomOnNextUpdate,
     holdPositionOnNextAppend,
+    isFollowingBottom,
     scrollToMessage,
     onVirtualizerAtBottomStateChange,
   } = useAnchoredScroll({
     channelId,
     contentRef,
+    initialMessageId: resumeMessageId,
     isLoading: showTimelineSkeleton,
     messages: renderedMessages,
     onTargetReached,
@@ -487,11 +500,18 @@ const MessageTimelineBase = React.forwardRef<
       scrollToBottomOnNextUpdate: prepareForOwnMessage,
       settleAtBottom: () => {
         if (!timelineVirtualizerApi) return false;
-        scrollToBottom("auto");
+        // A reader resumed at (or scrolled to) a message keeps their place
+        // when the composer resizes; only a view following the floor settles.
+        if (isFollowingBottom()) scrollToBottom("auto");
         return true;
       },
     }),
-    [prepareForOwnMessage, scrollToBottom, timelineVirtualizerApi],
+    [
+      isFollowingBottom,
+      prepareForOwnMessage,
+      scrollToBottom,
+      timelineVirtualizerApi,
+    ],
   );
 
   // Jump-to-message is purely DOM-based now: all loaded rows are mounted, so

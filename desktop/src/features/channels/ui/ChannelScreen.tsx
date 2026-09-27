@@ -446,6 +446,7 @@ export function ChannelScreen({
   });
   const {
     firstUnreadMessageId,
+    resumeMessageId,
     getFirstReplyIdForMessage,
     getReplyDescendantIdsForMessage,
     handleMarkMessageRead,
@@ -953,6 +954,7 @@ export function ChannelScreen({
                   profiles={messageProfiles}
                   ownerProfiles={messageOwnerProfiles}
                   firstUnreadMessageId={firstUnreadMessageId}
+                  resumeMessageId={resumeMessageId}
                   unreadCount={unreadCount}
                   targetMessageId={mainTimelineTargetMessageId}
                   threadAllMessages={displayedThreadAllMessages}

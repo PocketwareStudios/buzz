@@ -81,6 +81,8 @@ export type ChannelPaneProps = {
   huddleThreadRepliesError?: boolean;
   onRetryHuddleThreadReplies?: () => void;
   firstUnreadMessageId?: string | null;
+  /** Where opening the channel resumes reading; null starts at the newest. */
+  resumeMessageId?: string | null;
   unreadCount?: number;
   canResetThreadPanelWidth: boolean;
   onCancelEdit?: () => void;

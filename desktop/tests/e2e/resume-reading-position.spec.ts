@@ -91,6 +91,10 @@ test.describe("resume reading position", () => {
     await page.getByTestId("channel-general").click();
     await expect(page.getByTestId("chat-title")).toHaveText("general");
     await waitForMockLiveSubscription(page, "general");
+    // The channel opens at its oldest unread post; go to the latest first.
+    await page.getByTestId("message-timeline").hover();
+    await page.mouse.wheel(0, 5000);
+    await page.waitForTimeout(300);
 
     // Enough history to scroll, read while at the bottom.
     await emitMessages(page, "general", "History", 30, 5);
@@ -129,5 +133,68 @@ test.describe("resume reading position", () => {
     // Reading on reaches the first new post.
     await page.mouse.wheel(0, 150);
     await expect.poll(() => isInViewport(page, "Fresh 1")).toBe(true);
+  });
+
+  test("B — opening a channel lands on the first unread post", async ({
+    page,
+  }) => {
+    await installMockBridge(page);
+    await page.goto("/");
+    await page.getByTestId("channel-general").click();
+    await expect(page.getByTestId("chat-title")).toHaveText("general");
+    await waitForMockLiveSubscription(page, "general");
+    await page.getByTestId("channel-random").click();
+    await expect(page.getByTestId("chat-title")).toHaveText("random");
+
+    await emitMessages(page, "general", "Unread", 30, 60);
+
+    await page.getByTestId("channel-general").click();
+    await expect(page.getByTestId("chat-title")).toHaveText("general");
+    await page.waitForTimeout(800);
+
+    expect(await isInViewport(page, "Unread 1")).toBe(true);
+    expect(await isInViewport(page, "Unread 30")).toBe(false);
+  });
+  test("C — a channel with nothing unread still opens at the bottom", async ({
+    page,
+  }) => {
+    await installMockBridge(page);
+    await page.goto("/");
+    await page.getByTestId("channel-general").click();
+    await expect(page.getByTestId("chat-title")).toHaveText("general");
+    await waitForMockLiveSubscription(page, "general");
+    await page.getByTestId("message-timeline").hover();
+    await page.mouse.wheel(0, 5000);
+    await emitMessages(page, "general", "Seen", 30, 5);
+    await expect.poll(() => isInViewport(page, "Seen 30")).toBe(true);
+
+    await page.getByTestId("channel-random").click();
+    await expect(page.getByTestId("chat-title")).toHaveText("random");
+    await page.getByTestId("channel-general").click();
+    await expect(page.getByTestId("chat-title")).toHaveText("general");
+    await page.waitForTimeout(800);
+
+    expect(await isInViewport(page, "Seen 30")).toBe(true);
+  });
+
+  test("D — unread posts that fit on screen still follow new posts", async ({
+    page,
+  }) => {
+    await installMockBridge(page);
+    await page.goto("/");
+    await page.getByTestId("channel-general").click();
+    await expect(page.getByTestId("chat-title")).toHaveText("general");
+    await waitForMockLiveSubscription(page, "general");
+    await page.getByTestId("channel-random").click();
+    await expect(page.getByTestId("chat-title")).toHaveText("random");
+
+    await emitMessages(page, "general", "Few", 2, 60);
+    await page.getByTestId("channel-general").click();
+    await expect(page.getByTestId("chat-title")).toHaveText("general");
+    await page.waitForTimeout(800);
+    expect(await isInViewport(page, "Few 1")).toBe(true);
+
+    await emitMessages(page, "general", "Live", 25, 120);
+    await expect.poll(() => isInViewport(page, "Live 25")).toBe(true);
   });
 });
