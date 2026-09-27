@@ -169,6 +169,11 @@ test.describe("resume reading position", () => {
     await page.getByTestId("channel-general").click();
     await expect(page.getByTestId("chat-title")).toHaveText("general");
     await waitForMockLiveSubscription(page, "general");
+    // Catch up to the bottom before leaving, so there is no position to
+    // return to: new posts then open at the first unread one.
+    await page.getByTestId("message-timeline").hover();
+    await page.mouse.wheel(0, 5000);
+    await page.waitForTimeout(300);
     await page.getByTestId("channel-random").click();
     await expect(page.getByTestId("chat-title")).toHaveText("random");
 
@@ -322,5 +327,44 @@ test.describe("resume reading position", () => {
       .poll(() => isInViewport(page, reading as string), { timeout: 20000 })
       .toBe(true);
     expect(await isInViewport(page, "Deep 140")).toBe(false);
+  });
+
+  test("G — returning to a channel goes back to where the reader left it", async ({
+    page,
+  }) => {
+    await installMockBridge(page);
+    await page.goto("/");
+    await page.getByTestId("channel-general").click();
+    await expect(page.getByTestId("chat-title")).toHaveText("general");
+    await waitForMockLiveSubscription(page, "general");
+    const timeline = page.getByTestId("message-timeline");
+    await timeline.hover();
+    await page.mouse.wheel(0, 5000);
+    // History the reader has already read, like a news channel they are
+    // caught up on: dated in the past but after the channel's seeded posts
+    // (60 s old), so it is the newest content and sits at the bottom.
+    await emitMessages(page, "general", "Card", 50, -58);
+    await expect.poll(() => isInViewport(page, "Card 50")).toBe(true);
+    await page.waitForTimeout(500);
+
+    // Nothing new, but the reader stops a little above the end and leaves:
+    // far from both the oldest history and the posts that arrive later, so
+    // only returning to this exact spot keeps it on screen.
+    await page.mouse.wheel(0, -400);
+    await page.waitForTimeout(500);
+    const reading = await middleVisiblePost(page, "Card ");
+    expect(reading).not.toBeNull();
+    await page.getByTestId("channel-random").click();
+    await expect(page.getByTestId("chat-title")).toHaveText("random");
+
+    // New posts arrive while they are elsewhere.
+    await emitMessages(page, "general", "Later", 5, 200);
+
+    await page.getByTestId("channel-general").click();
+    await expect(page.getByTestId("chat-title")).toHaveText("general");
+    await page.waitForTimeout(1000);
+    expect(await isInViewport(page, reading as string)).toBe(true);
+    expect(await isInViewport(page, "Later 5")).toBe(false);
+    expect(await isInViewport(page, "Card 1")).toBe(false);
   });
 });
