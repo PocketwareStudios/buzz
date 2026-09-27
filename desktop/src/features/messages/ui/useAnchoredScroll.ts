@@ -17,6 +17,8 @@ import { useVirtualizedViewportResize } from "./useVirtualizedViewportResize";
  * rounding from the layout engine.
  */
 const AT_BOTTOM_THRESHOLD_PX = 32;
+// Commits an initial resume may wait for its row to mount before giving up.
+const RESUME_RETRY_LIMIT = 10;
 
 type AnchorState =
   | { kind: "at-bottom" }
@@ -38,6 +40,10 @@ type UseAnchoredScrollOptions = {
   messages: Array<{ id: string }>;
   splitPanelOpen?: boolean;
 
+  /** Where a freshly mounted or switched channel starts when there is no
+   *  `targetMessageId`: typically the oldest unread post. Used once per
+   *  channel, without a highlight; null starts at the bottom. */
+  initialMessageId?: string | null;
   /** When set, scroll to this message on mount and on change. */
   targetMessageId?: string | null;
   /** Whether a targeted message should pulse after scrolling to it. */
@@ -81,6 +87,10 @@ type UseAnchoredScrollResult = {
    *  back while the reader was scrolled up is released at the old floor, so
    *  the reader continues from the first new post. */
   holdPositionOnNextAppend: () => void;
+  /** Whether the view is following the floor (not anchored to a message the
+   *  reader is on). External layout owners use it to avoid pulling a reader
+   *  who is mid-history down to the bottom. */
+  isFollowingBottom: () => boolean;
   /** Arm a one-shot scroll-to-bottom that fires on the next appended message
    *  (used by the composer's send flow). */
   scrollToBottomOnNextUpdate: () => void;
@@ -171,6 +181,7 @@ export function useAnchoredScroll({
   virtualSettleAtBottom,
   virtualizerOwnsPrependAnchoring = false,
   virtualizerRenderVersion = 0,
+  initialMessageId = null,
 }: UseAnchoredScrollOptions): UseAnchoredScrollResult {
   // Anchor lives in a ref because it must survive renders and is updated
   // both on scroll (commit-time read) and in the layout effect (post-render
@@ -207,6 +218,17 @@ export function useAnchoredScroll({
   // below the reading position without re-pinning to the floor. Consumed (and
   // cleared) by the next message commit, whatever it contains.
   const holdPositionOnNextAppendRef = React.useRef(false);
+  // True from an initial resume until the view has left the floor or the
+  // reader interacts; see `onVirtualizerAtBottomStateChange`.
+  const resumeGraceRef = React.useRef(false);
+  // Detaches the input listeners that end a resume's grace (attached only
+  // while a grace is active).
+  const detachResumeGraceRef = React.useRef<(() => void) | null>(null);
+  // An initial resume target whose row was not mounted on the first pass.
+  const pendingResumeRef = React.useRef<{
+    messageId: string;
+    attemptsLeft: number;
+  } | null>(null);
   // True from a programmatic bottom pin until the list's row measurement settles
   // and the view reaches a true physical bottom. During this window `onScroll`
   // ignores transient gaps and keeps chasing the floor. A `ref`, not state — the
@@ -237,6 +259,10 @@ export function useAnchoredScroll({
     handledTargetIdRef.current = null;
     forceBottomOnNextAppendRef.current = false;
     holdPositionOnNextAppendRef.current = false;
+    pendingResumeRef.current = null;
+    resumeGraceRef.current = false;
+    detachResumeGraceRef.current?.();
+    detachResumeGraceRef.current = null;
     settlingRef.current = false;
     programmaticScrollTopRef.current = null;
     isWritingScrollRef.current = false;
@@ -396,9 +422,57 @@ export function useAnchoredScroll({
     forceBottomOnNextAppendRef.current = true;
   }, []);
 
+  // A resume that ends at the physical floor (the unread posts already fit on
+  // screen) is not a reading position: follow the floor like any bottom view.
+  const endResumeGrace = React.useCallback(() => {
+    resumeGraceRef.current = false;
+    detachResumeGraceRef.current?.();
+    detachResumeGraceRef.current = null;
+  }, []);
+
+  const followFloorIfResumedThere = React.useCallback(() => {
+    const container = scrollContainerRef.current;
+    if (!container || anchorRef.current.kind !== "message") return;
+    if (!isAtBottomNow(container)) return;
+    endResumeGrace();
+    anchorRef.current = { kind: "at-bottom" };
+    virtualizerAtBottomRef.current = true;
+    setIsAtBottom(true);
+    setNewMessageCount(0);
+  }, [endResumeGrace, scrollContainerRef]);
+
+  // The reader taking over (wheel, touch, pointer, keys) ends a resume's
+  // grace; if that leaves them at the floor, the view follows it again.
+  const beginResumeGrace = React.useCallback(
+    (container: HTMLElement) => {
+      endResumeGrace();
+      resumeGraceRef.current = true;
+      const onInput = () => {
+        if (!resumeGraceRef.current) return;
+        endResumeGrace();
+        followFloorIfResumedThere();
+      };
+      const events = ["wheel", "touchstart", "pointerdown", "keydown"] as const;
+      for (const type of events) {
+        container.addEventListener(type, onInput, { passive: true });
+      }
+      detachResumeGraceRef.current = () => {
+        for (const type of events) {
+          container.removeEventListener(type, onInput);
+        }
+      };
+    },
+    [endResumeGrace, followFloorIfResumedThere],
+  );
+
   const holdPositionOnNextAppend = React.useCallback(() => {
     holdPositionOnNextAppendRef.current = true;
   }, []);
+
+  const isFollowingBottom = React.useCallback(
+    () => anchorRef.current.kind === "at-bottom",
+    [],
+  );
 
   const settleAtBottomAfterLayout = React.useCallback(() => {
     const container = scrollContainerRef.current;
@@ -659,6 +733,47 @@ export function useAnchoredScroll({
         } else {
           pinToBottomOnMount();
         }
+      } else if (
+        initialMessageId &&
+        messages.some((message) => message.id === initialMessageId)
+      ) {
+        // Resume reading where the reader left off instead of the newest post.
+        // Own the viewport first: the channel reset assumed a bottom start,
+        // and any later settle (row measurement, composer resize) must not
+        // pull the reader to the floor while the row is brought into range.
+        virtualCancelBottomIntent?.();
+        virtualizerAtBottomRef.current = false;
+        beginResumeGrace(container);
+        // Virtua applies the resume on its next frame; check the landing
+        // after that, while the grace still holds.
+        mountPinRafIdRef.current = requestAnimationFrame(() => {
+          mountPinRafIdRef.current = requestAnimationFrame(() => {
+            mountPinRafIdRef.current = null;
+            if (resumeGraceRef.current) followFloorIfResumedThere();
+          });
+        });
+        anchorRef.current = {
+          kind: "message",
+          messageId: initialMessageId,
+          topOffset: 0,
+        };
+        setIsAtBottom(false);
+        // Virtua applies scroll requests on its next frame, so the list's own
+        // open-time floor request is still queued here. Route the resume
+        // through the same queue so it lands after (and wins over) that
+        // request; a direct DOM scroll would be overwritten a frame later.
+        const resumed =
+          virtualizerOwnsPrependAnchoring && virtualScrollToMessage
+            ? virtualScrollToMessage(initialMessageId, { behavior: "auto" })
+            : scrollToMessageImperative(initialMessageId, { highlight: false });
+        if (!resumed) {
+          // Not mounted yet (only rows near the floor render on open): retry
+          // as rows commit, like a deep-link target, but bounded.
+          pendingResumeRef.current = {
+            messageId: initialMessageId,
+            attemptsLeft: RESUME_RETRY_LIMIT,
+          };
+        }
       } else {
         pinToBottomOnMount();
       }
@@ -798,7 +913,10 @@ export function useAnchoredScroll({
     prevMessageCountRef.current = messages.length;
     prevMessagesRef.current = messages;
   }, [
+    beginResumeGrace,
+    followFloorIfResumedThere,
     highlightTargetMessage,
+    initialMessageId,
     isLoading,
     messages,
     onTargetReached,
@@ -807,10 +925,33 @@ export function useAnchoredScroll({
     scrollToBottomImperative,
     scrollToMessageImperative,
     targetMessageId,
+    virtualCancelBottomIntent,
     virtualScrollToBottom,
+    virtualScrollToMessage,
     virtualSettleAtBottom,
     virtualizerOwnsPrependAnchoring,
   ]);
+
+  // Finish an initial resume whose row was not mounted on the first pass.
+  // Retries on each message or virtualized-range commit, a bounded number of
+  // times, and stops as soon as the reader has taken over (anchor changed).
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `messages` and `virtualizerRenderVersion` are retry triggers; the effect reads the DOM.
+  React.useEffect(() => {
+    const pending = pendingResumeRef.current;
+    if (!pending) return;
+    void virtualizerRenderVersion;
+    const anchor = anchorRef.current;
+    if (anchor.kind !== "message" || anchor.messageId !== pending.messageId) {
+      pendingResumeRef.current = null;
+      return;
+    }
+    if (scrollToMessageImperative(pending.messageId, { highlight: false })) {
+      pendingResumeRef.current = null;
+      return;
+    }
+    pending.attemptsLeft -= 1;
+    if (pending.attemptsLeft <= 0) pendingResumeRef.current = null;
+  }, [messages, scrollToMessageImperative, virtualizerRenderVersion]);
 
   // ---------------------------------------------------------------------------
   // Content resize: while stuck to the bottom, an in-viewport reflow (image
@@ -974,6 +1115,8 @@ export function useAnchoredScroll({
       if (highlightTimeoutRef.current !== null) {
         window.clearTimeout(highlightTimeoutRef.current);
       }
+      detachResumeGraceRef.current?.();
+      detachResumeGraceRef.current = null;
       if (programmaticScrollRafRef.current !== null) {
         cancelAnimationFrame(programmaticScrollRafRef.current);
       }
@@ -986,6 +1129,14 @@ export function useAnchoredScroll({
   const onVirtualizerAtBottomStateChange = React.useCallback(
     (atBottom: boolean) => {
       if (!virtualizerOwnsPrependAnchoring) return;
+      // A resume owns the viewport until it has visibly left the floor or the
+      // reader acts: the list can still report the floor it was pinned to
+      // before the resume took over, and that stale report must not hand the
+      // viewport back to the bottom.
+      if (resumeGraceRef.current) {
+        if (atBottom) return;
+        endResumeGrace();
+      }
       virtualizerAtBottomRef.current = atBottom;
       if (atBottom) {
         anchorRef.current = { kind: "at-bottom" };
@@ -993,7 +1144,7 @@ export function useAnchoredScroll({
       }
       setIsAtBottom(atBottom);
     },
-    [virtualizerOwnsPrependAnchoring],
+    [endResumeGrace, virtualizerOwnsPrependAnchoring],
   );
 
   return {
@@ -1005,6 +1156,7 @@ export function useAnchoredScroll({
     settleAtBottomAfterLayout,
     scrollToBottomOnNextUpdate,
     holdPositionOnNextAppend,
+    isFollowingBottom,
     scrollToMessage: scrollToMessageImperative,
     onVirtualizerAtBottomStateChange,
   };

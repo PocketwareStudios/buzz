@@ -494,10 +494,17 @@ export function useChannelUnreadState({
     [activeChannelId, getReplyDescendantIdsForMessage, markChannelUnread],
   );
 
+  // Where opening the channel resumes reading: the oldest unread post, but
+  // only when there was a read position to resume from. A never-read channel
+  // (no frontier) counts every post as unread and starts at the newest.
+  const resumeMessageId =
+    openFrontierSeconds === null ? null : firstUnreadMessageId;
+
   return {
     createdAtByMessageId,
     directReplyIdsByParentId,
     firstUnreadMessageId,
+    resumeMessageId,
     getFirstReplyIdForMessage,
     getReplyDescendantIdsForMessage,
     handleMarkMessageRead,
