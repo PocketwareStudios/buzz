@@ -42,6 +42,9 @@ export type TimelineVirtualizerApi = {
     messageId: string,
     options?: { behavior?: ScrollBehavior },
   ) => boolean;
+  /** The message at the top of the viewport and its distance below the
+   *  viewport top, read from the virtualizer (no DOM walk); null when none. */
+  readingPosition: () => { messageId: string; topOffset: number } | null;
 };
 
 type TimelineMessageListProps = {
@@ -638,17 +641,22 @@ function VirtualizedTimelineRows({
     }
   }, [isPrepend, items.length, keys, settleAtBottom]);
 
-  const messageItemIndexById = React.useMemo(() => {
-    const byId = new Map<string, number>();
-    items.forEach((item, index) => {
-      if (item.kind !== "timeline-item") return;
-      for (const messageId of timelineItemMessageIds(item.item)) {
-        byId.set(messageId, index);
-      }
-    });
-    return byId;
-  }, [items]);
+  const { messageItemIndexById, firstMessageIdByItemIndex } =
+    React.useMemo(() => {
+      const byId = new Map<string, number>();
+      const byIndex = new Map<number, string>();
+      items.forEach((item, index) => {
+        if (item.kind !== "timeline-item") return;
+        for (const messageId of timelineItemMessageIds(item.item)) {
+          byId.set(messageId, index);
+          if (!byIndex.has(index)) byIndex.set(index, messageId);
+        }
+      });
+      return { messageItemIndexById: byId, firstMessageIdByItemIndex: byIndex };
+    }, [items]);
   messageItemIndexByIdRef.current = messageItemIndexById;
+  const firstMessageIdByItemIndexRef = React.useRef(firstMessageIdByItemIndex);
+  firstMessageIdByItemIndexRef.current = firstMessageIdByItemIndex;
 
   React.useLayoutEffect(() => {
     const scroller = hostRef.current?.firstElementChild;
@@ -682,6 +690,28 @@ function VirtualizedTimelineRows({
         if (index === undefined) return false;
         listRef.current?.scrollToIndex(index, { align: "center" });
         return true;
+      },
+      readingPosition() {
+        const list = listRef.current;
+        if (!list) return null;
+        const byIndex = firstMessageIdByItemIndexRef.current;
+        const count = itemsLengthRef.current;
+        // The item under the viewport top may be a divider or header; use the
+        // first message row at or below it.
+        for (
+          let index = Math.max(0, list.findItemIndex(list.scrollOffset));
+          index < count;
+          index += 1
+        ) {
+          const messageId = byIndex.get(index);
+          if (messageId) {
+            return {
+              messageId,
+              topOffset: list.getItemOffset(index) - list.scrollOffset,
+            };
+          }
+        }
+        return null;
       },
     };
     onVirtualizerApiChange(api);

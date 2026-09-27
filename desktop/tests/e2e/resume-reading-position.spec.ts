@@ -82,6 +82,32 @@ async function isInViewport(page: Page, text: string) {
   }, text);
 }
 
+/** The body text of the message row nearest the middle of the viewport. */
+async function middleVisiblePost(page: Page, prefix: string) {
+  return page.evaluate((prefix) => {
+    const timeline = document.querySelector<HTMLElement>(
+      '[data-testid="message-timeline"]',
+    );
+    if (!timeline) return null;
+    const box = timeline.getBoundingClientRect();
+    const middle = (box.top + box.bottom) / 2;
+    let best: { text: string; distance: number } | null = null;
+    for (const row of timeline.querySelectorAll<HTMLElement>(
+      "[data-message-id]",
+    )) {
+      const text = row.innerText
+        .split("\n")
+        .map((line) => line.trim())
+        .find((line) => line.startsWith(prefix));
+      if (!text) continue;
+      const rect = row.getBoundingClientRect();
+      const distance = Math.abs((rect.top + rect.bottom) / 2 - middle);
+      if (!best || distance < best.distance) best = { text, distance };
+    }
+    return best?.text ?? null;
+  }, prefix);
+}
+
 test.describe("resume reading position", () => {
   test("A — reaching held-back new posts keeps the first one in view", async ({
     page,
@@ -196,5 +222,105 @@ test.describe("resume reading position", () => {
 
     await emitMessages(page, "general", "Live", 25, 120);
     await expect.poll(() => isInViewport(page, "Live 25")).toBe(true);
+  });
+  for (const [label, simulate] of [
+    ["nothing (control)", async (_page: Page) => {}],
+    [
+      "the window losing and regaining focus",
+      async (page: Page) => {
+        await page.evaluate(() => {
+          const set = (state: string) =>
+            Object.defineProperty(document, "visibilityState", {
+              configurable: true,
+              get: () => state,
+            });
+          set("hidden");
+          document.dispatchEvent(new Event("visibilitychange"));
+          window.dispatchEvent(new Event("blur"));
+          set("visible");
+          document.dispatchEvent(new Event("visibilitychange"));
+          window.dispatchEvent(new Event("focus"));
+        });
+      },
+    ],
+    [
+      "a relay reconnect (e.g. after sleep)",
+      async (page: Page) => {
+        await page.evaluate(() =>
+          (
+            window as Window & {
+              __BUZZ_E2E_RESTART_MOCK_WEBSOCKETS__?: () => number;
+            }
+          ).__BUZZ_E2E_RESTART_MOCK_WEBSOCKETS__?.(),
+        );
+      },
+    ],
+  ] as const) {
+    test(`E — returning to the app keeps the reading position: ${label}`, async ({
+      page,
+    }) => {
+      await installMockBridge(page);
+      await page.goto("/");
+      await page.getByTestId("channel-general").click();
+      await expect(page.getByTestId("chat-title")).toHaveText("general");
+      await waitForMockLiveSubscription(page, "general");
+      const timeline = page.getByTestId("message-timeline");
+      await timeline.hover();
+      await page.mouse.wheel(0, 5000);
+      await emitMessages(page, "general", "Post", 60, 5);
+      await expect.poll(() => isInViewport(page, "Post 60")).toBe(true);
+
+      // Read somewhere in the middle, and note the post under the reader.
+      // Stay well inside the loaded posts, away from the history loader.
+      for (let i = 0; i < 2; i += 1) await page.mouse.wheel(0, -400);
+      await page.waitForTimeout(500);
+      const reading = await middleVisiblePost(page, "Post ");
+      expect(reading).not.toBeNull();
+      expect(await isInViewport(page, "Post 60")).toBe(false);
+
+      await simulate(page);
+      await page.waitForTimeout(2000);
+
+      expect(await isInViewport(page, reading as string)).toBe(true);
+      expect(await isInViewport(page, "Post 60")).toBe(false);
+    });
+  }
+
+  test("F — a reconnect that drops the reading post loads it back", async ({
+    page,
+  }) => {
+    await installMockBridge(page);
+    await page.goto("/");
+    await page.getByTestId("channel-general").click();
+    await expect(page.getByTestId("chat-title")).toHaveText("general");
+    await waitForMockLiveSubscription(page, "general");
+    const timeline = page.getByTestId("message-timeline");
+    await timeline.hover();
+    await page.mouse.wheel(0, 5000);
+    await emitMessages(page, "general", "Deep", 140, 5);
+    await expect.poll(() => isInViewport(page, "Deep 140")).toBe(true);
+
+    // Read far back: older than the newest page a reconnect refetches.
+    for (let i = 0; i < 6; i += 1) await page.mouse.wheel(0, -500);
+    await page.waitForTimeout(500);
+    const reading = await middleVisiblePost(page, "Deep ");
+    expect(reading).not.toBeNull();
+    expect(Number(reading?.split(" ")[1])).toBeLessThan(80);
+
+    await page.evaluate(() =>
+      (
+        window as Window & {
+          __BUZZ_E2E_RESTART_MOCK_WEBSOCKETS__?: () => number;
+        }
+      ).__BUZZ_E2E_RESTART_MOCK_WEBSOCKETS__?.(),
+    );
+    // The refresh lands about a second after the reconnect, and each older
+    // page commits once the scroller is at rest, so a deep restore takes a
+    // few seconds: judge the position only after that.
+    await page.waitForTimeout(3000);
+    await expect
+      .poll(() => isInViewport(page, reading as string), { timeout: 20000 })
+      .toBe(true);
+    expect(await isInViewport(page, "Deep 140")).toBe(false);
   });
 });

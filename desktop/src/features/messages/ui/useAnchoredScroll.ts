@@ -19,6 +19,8 @@ import { useVirtualizedViewportResize } from "./useVirtualizedViewportResize";
 const AT_BOTTOM_THRESHOLD_PX = 32;
 // Commits an initial resume may wait for its row to mount before giving up.
 const RESUME_RETRY_LIMIT = 10;
+// Older pages a lost reading position may load while being restored.
+const RESTORE_OLDER_PAGE_LIMIT = 10;
 
 type AnchorState =
   | { kind: "at-bottom" }
@@ -44,6 +46,16 @@ type UseAnchoredScrollOptions = {
    *  `targetMessageId`: typically the oldest unread post. Used once per
    *  channel, without a highlight; null starts at the bottom. */
   initialMessageId?: string | null;
+  /** Virtualizer read of the message at the top of the viewport (cheap, no
+   *  DOM walk), used to remember where a mid-history reader is. */
+  virtualReadingPosition?: () => {
+    messageId: string;
+    topOffset: number;
+  } | null;
+  /** Asks for one older page while restoring a reading position that a head
+   *  refresh dropped: "requested", "busy" (retry when messages change) or
+   *  "exhausted" (no older history to load). */
+  requestOlder?: () => "requested" | "busy" | "exhausted";
   /** When set, scroll to this message on mount and on change. */
   targetMessageId?: string | null;
   /** Whether a targeted message should pulse after scrolling to it. */
@@ -182,6 +194,8 @@ export function useAnchoredScroll({
   virtualizerOwnsPrependAnchoring = false,
   virtualizerRenderVersion = 0,
   initialMessageId = null,
+  virtualReadingPosition,
+  requestOlder,
 }: UseAnchoredScrollOptions): UseAnchoredScrollResult {
   // Anchor lives in a ref because it must survive renders and is updated
   // both on scroll (commit-time read) and in the layout effect (post-render
@@ -218,6 +232,19 @@ export function useAnchoredScroll({
   // below the reading position without re-pinning to the floor. Consumed (and
   // cleared) by the next message commit, whatever it contains.
   const holdPositionOnNextAppendRef = React.useRef(false);
+  // The message a mid-history reader is on (updated as they scroll; null at
+  // the floor), and a reading position a head refresh dropped that is being
+  // restored by loading older pages.
+  const readingRef = React.useRef<{
+    messageId: string;
+    topOffset: number;
+  } | null>(null);
+  const lostReadingRef = React.useRef<{
+    messageId: string;
+    attemptsLeft: number;
+    // The message list a page was last requested for; one request per list.
+    requestedFor: readonly { id: string }[] | null;
+  } | null>(null);
   // True from an initial resume until the view has left the floor or the
   // reader interacts; see `onVirtualizerAtBottomStateChange`.
   const resumeGraceRef = React.useRef(false);
@@ -260,6 +287,8 @@ export function useAnchoredScroll({
     forceBottomOnNextAppendRef.current = false;
     holdPositionOnNextAppendRef.current = false;
     pendingResumeRef.current = null;
+    readingRef.current = null;
+    lostReadingRef.current = null;
     resumeGraceRef.current = false;
     detachResumeGraceRef.current?.();
     detachResumeGraceRef.current = null;
@@ -674,6 +703,8 @@ export function useAnchoredScroll({
       return;
     }
     anchorRef.current = computeAnchor(container);
+    readingRef.current =
+      anchorRef.current.kind === "message" ? { ...anchorRef.current } : null;
     const atBottom = anchorRef.current.kind === "at-bottom";
     setIsAtBottom((prev) => (prev === atBottom ? prev : atBottom));
     if (atBottom) {
@@ -826,6 +857,66 @@ export function useAnchoredScroll({
       return;
     }
 
+    // A head refresh (subscribe / reconnect) replaces the loaded window with
+    // the newest page, which can drop the older rows a mid-history reader is
+    // on. Hold the viewport and restore that row by loading older pages
+    // rather than letting the view land wherever the remaining rows put it.
+    const reading = anchor.kind === "message" ? anchor : readingRef.current;
+    if (
+      reading &&
+      !lostReadingRef.current &&
+      messages !== prevMessages &&
+      !isPrepend &&
+      !messages.some((message) => message.id === reading.messageId) &&
+      prevMessages.some((message) => message.id === reading.messageId)
+    ) {
+      lostReadingRef.current = {
+        messageId: reading.messageId,
+        attemptsLeft: RESTORE_OLDER_PAGE_LIMIT,
+        requestedFor: null,
+      };
+      virtualCancelBottomIntent?.();
+      virtualizerAtBottomRef.current = false;
+      anchorRef.current = {
+        kind: "message",
+        messageId: reading.messageId,
+        topOffset: reading.topOffset,
+      };
+      beginResumeGrace(container);
+      setIsAtBottom(false);
+      prevLastMessageIdRef.current = lastMessage?.id;
+      prevFirstMessageIdRef.current = firstMessage?.id;
+      prevMessageCountRef.current = messages.length;
+      prevMessagesRef.current = messages;
+      return;
+    }
+
+    // The same refresh can instead trim older rows above a reader whose row
+    // survives. Virtua keeps the scroll offset, so the view would slide down
+    // by the removed height; put the reading row back at its offset.
+    if (
+      reading &&
+      virtualizerOwnsPrependAnchoring &&
+      !virtualizerAtBottomRef.current &&
+      messages !== prevMessages &&
+      !isPrepend &&
+      firstMessage?.id !== prevFirstMessageIdRef.current &&
+      messages.some((message) => message.id === reading.messageId)
+    ) {
+      const row = container.querySelector<HTMLElement>(
+        `[data-message-id="${CSS.escape(reading.messageId)}"]`,
+      );
+      if (row) {
+        const drift =
+          row.getBoundingClientRect().top -
+          container.getBoundingClientRect().top -
+          reading.topOffset;
+        if (Math.abs(drift) > 0.5) container.scrollBy(0, drift);
+      } else {
+        virtualScrollToMessage?.(reading.messageId, { behavior: "auto" });
+      }
+    }
+
     if (messages !== prevMessages && holdPositionOnNextAppendRef.current) {
       holdPositionOnNextAppendRef.current = false;
       if (
@@ -952,6 +1043,46 @@ export function useAnchoredScroll({
     pending.attemptsLeft -= 1;
     if (pending.attemptsLeft <= 0) pendingResumeRef.current = null;
   }, [messages, scrollToMessageImperative, virtualizerRenderVersion]);
+
+  // Restore a reading position a head refresh dropped: load older pages (a
+  // bounded number) until its row is back, then return the reader to it. The
+  // reader taking over, or history running out, ends the attempt.
+  React.useEffect(() => {
+    const lost = lostReadingRef.current;
+    if (!lost) return;
+    if (!resumeGraceRef.current) {
+      lostReadingRef.current = null;
+      return;
+    }
+    if (messages.some((message) => message.id === lost.messageId)) {
+      lostReadingRef.current = null;
+      if (virtualizerOwnsPrependAnchoring && virtualScrollToMessage) {
+        virtualScrollToMessage(lost.messageId, { behavior: "auto" });
+      } else {
+        scrollToMessageImperative(lost.messageId, { highlight: false });
+      }
+      return;
+    }
+    // One page per committed list: a re-run with the same messages (a callback
+    // identity change) must not stack another fetch behind the one in flight.
+    if (lost.requestedFor === messages) return;
+    const result =
+      lost.attemptsLeft > 0 ? (requestOlder?.() ?? "exhausted") : "exhausted";
+    if (result === "requested") {
+      lost.attemptsLeft -= 1;
+      lost.requestedFor = messages;
+    } else if (result === "exhausted") {
+      lostReadingRef.current = null;
+      endResumeGrace();
+    }
+  }, [
+    endResumeGrace,
+    messages,
+    requestOlder,
+    scrollToMessageImperative,
+    virtualScrollToMessage,
+    virtualizerOwnsPrependAnchoring,
+  ]);
 
   // ---------------------------------------------------------------------------
   // Content resize: while stuck to the bottom, an in-viewport reflow (image
@@ -1135,7 +1266,31 @@ export function useAnchoredScroll({
       // viewport back to the bottom.
       if (resumeGraceRef.current) {
         if (atBottom) return;
-        endResumeGrace();
+        if (!lostReadingRef.current) endResumeGrace();
+      }
+      if (atBottom) {
+        readingRef.current = null;
+      } else {
+        const position = virtualReadingPosition?.();
+        const container = scrollContainerRef.current;
+        const row =
+          position && container
+            ? container.querySelector<HTMLElement>(
+                `[data-message-id="${CSS.escape(position.messageId)}"]`,
+              )
+            : null;
+        readingRef.current = position
+          ? {
+              messageId: position.messageId,
+              // Measure the one reading row so the later correction compares
+              // like with like (Virtua offsets exclude list padding).
+              topOffset:
+                row && container
+                  ? row.getBoundingClientRect().top -
+                    container.getBoundingClientRect().top
+                  : position.topOffset,
+            }
+          : readingRef.current;
       }
       virtualizerAtBottomRef.current = atBottom;
       if (atBottom) {
@@ -1144,7 +1299,12 @@ export function useAnchoredScroll({
       }
       setIsAtBottom(atBottom);
     },
-    [endResumeGrace, virtualizerOwnsPrependAnchoring],
+    [
+      endResumeGrace,
+      scrollContainerRef,
+      virtualReadingPosition,
+      virtualizerOwnsPrependAnchoring,
+    ],
   );
 
   return {
