@@ -356,13 +356,18 @@ const MessageTimelineBase = React.forwardRef<
   });
 
   // Older-page loads for restoring a reading position a head refresh dropped.
-  // Assigned once the load-older inputs are known (below); stable identity.
+  // Assigned once the load-older inputs are known (below). Its identity
+  // changes when a busy loader frees up, so a restore that was told "busy"
+  // retries then instead of waiting on an unrelated re-render.
   const requestOlderRef = React.useRef<
     () => "requested" | "busy" | "exhausted"
   >(() => "exhausted");
+  const olderPageBusy =
+    isFetchingOlder || isHoldingPrepend || showTimelineSkeleton;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `olderPageBusy` is the retry trigger; the call reads current inputs through the ref.
   const requestOlderForRestore = React.useCallback(
     () => requestOlderRef.current(),
-    [],
+    [olderPageBusy],
   );
   // Where a freshly opened channel starts when nothing else owns the viewport:
   // the oldest unread post (open-time frontier), so reading resumes instead of
@@ -646,10 +651,10 @@ const MessageTimelineBase = React.forwardRef<
   ]);
 
   requestOlderRef.current = () => {
+    // Busy first: while a page is in flight `hasOlderMessages` can read false
+    // until it lands, which is not the end of history.
+    if (olderPageBusy) return "busy";
     if (!fetchOlder || !hasOlderMessages) return "exhausted";
-    if (isFetchingOlder || isHoldingPrepend || showTimelineSkeleton) {
-      return "busy";
-    }
     void fetchOlder();
     return "requested";
   };
