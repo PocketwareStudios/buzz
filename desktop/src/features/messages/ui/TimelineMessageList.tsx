@@ -42,8 +42,9 @@ export type TimelineVirtualizerApi = {
     messageId: string,
     options?: { behavior?: ScrollBehavior },
   ) => boolean;
-  /** Messages in rows below the viewport, read from the virtualizer. */
-  belowViewportMessageCount: () => number;
+  /** The last message on screen (at the viewport's bottom edge), read from
+   *  the virtualizer; null when no message row is visible. */
+  lastVisibleMessageId: () => string | null;
 };
 
 type TimelineMessageListProps = {
@@ -651,22 +652,19 @@ function VirtualizedTimelineRows({
     return byId;
   }, [items]);
   messageItemIndexByIdRef.current = messageItemIndexById;
-  // messagesFromIndex[i]: messages in rows i..end, for the below-viewport
-  // count without walking rows on every scroll.
-  const messagesFromIndex = React.useMemo(() => {
-    const counts = new Array<number>(items.length + 1).fill(0);
-    for (let index = items.length - 1; index >= 0; index -= 1) {
-      const item = items[index];
-      counts[index] =
-        counts[index + 1] +
-        (item.kind === "timeline-item"
-          ? timelineItemMessageIds(item.item).length
-          : 0);
-    }
-    return counts;
-  }, [items]);
-  const messagesFromIndexRef = React.useRef(messagesFromIndex);
-  messagesFromIndexRef.current = messagesFromIndex;
+  // lastMessageIdByItemIndex[i]: the last message id in row i (or null for
+  // non-message rows), for the last-visible lookup without a DOM walk.
+  const lastMessageIdByItemIndex = React.useMemo(
+    () =>
+      items.map((item) =>
+        item.kind === "timeline-item"
+          ? (timelineItemMessageIds(item.item).at(-1) ?? null)
+          : null,
+      ),
+    [items],
+  );
+  const lastMessageIdByItemIndexRef = React.useRef(lastMessageIdByItemIndex);
+  lastMessageIdByItemIndexRef.current = lastMessageIdByItemIndex;
 
   React.useLayoutEffect(() => {
     const scroller = hostRef.current?.firstElementChild;
@@ -701,15 +699,24 @@ function VirtualizedTimelineRows({
         listRef.current?.scrollToIndex(index, { align: "center" });
         return true;
       },
-      belowViewportMessageCount() {
+      lastVisibleMessageId() {
         const list = listRef.current;
-        if (!list) return 0;
-        const counts = messagesFromIndexRef.current;
-        // The row under the viewport's bottom edge counts as seen.
-        const lastVisible = list.findItemIndex(
-          list.scrollOffset + list.viewportSize - 1,
-        );
-        return counts[Math.max(0, lastVisible + 1)] ?? 0;
+        if (!list) return null;
+        const ids = lastMessageIdByItemIndexRef.current;
+        // The row under the viewport's bottom edge counts as on screen; walk
+        // up past dividers and headers to the nearest message row.
+        for (
+          let index = Math.min(
+            ids.length - 1,
+            list.findItemIndex(list.scrollOffset + list.viewportSize - 1),
+          );
+          index >= 0;
+          index -= 1
+        ) {
+          const id = ids[index];
+          if (id) return id;
+        }
+        return null;
       },
     };
     onVirtualizerApiChange(api);

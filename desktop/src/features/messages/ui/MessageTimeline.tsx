@@ -26,6 +26,12 @@ import { TimelineMessageList } from "./TimelineMessageList";
 import type { TimelineVirtualizerApi } from "./TimelineMessageList";
 import { useAnchoredScroll } from "./useAnchoredScroll";
 import { useLoadOlderOnScroll } from "./useLoadOlderOnScroll";
+import {
+  isAfterFrontier,
+  readSeenFrontier,
+  writeSeenFrontier,
+  type SeenFrontier,
+} from "@/features/messages/lib/seenFrontierStore";
 import { useBufferedTimelineMessages } from "./useBufferedTimelineMessages";
 import {
   DirectMessageIntroAvatarStack,
@@ -409,23 +415,83 @@ const MessageTimelineBase = React.forwardRef<
     },
     [],
   );
-  // Posts below the viewport, reported to the shell for the sidebar count.
-  // Read from the virtualizer on each scroll report and message change;
-  // only changes are reported.
+  // Unseen posts, reported to the shell for the sidebar count of the open
+  // channel: posts after the newest one the reader has had on screen here.
+  // That "seen" frontier only moves forward (scrolling back up never makes
+  // posts count again) and is remembered per channel on this device. Live
+  // posts held back while scrolled up are unseen too. Only changes are
+  // reported.
   const lastBelowCountRef = React.useRef<number | null>(null);
+  const seenFrontierRef = React.useRef<SeenFrontier | null>(null);
+  const seenChannelRef = React.useRef<string | null | undefined>(undefined);
+  const messageIndexById = React.useMemo(
+    () =>
+      new Map(renderedMessages.map((message, index) => [message.id, index])),
+    [renderedMessages],
+  );
   const reportBelowCountRef = React.useRef(() => {});
   reportBelowCountRef.current = () => {
-    if (!onBelowViewportCountChange) return;
-    const below = timelineVirtualizerApi
-      ? timelineVirtualizerApi.belowViewportMessageCount()
+    if (!onBelowViewportCountChange || showTimelineSkeleton) return;
+    if (seenChannelRef.current !== channelId) {
+      if (seenChannelRef.current && seenFrontierRef.current) {
+        writeSeenFrontier(seenChannelRef.current, seenFrontierRef.current);
+      }
+      seenChannelRef.current = channelId;
+      seenFrontierRef.current = channelId ? readSeenFrontier(channelId) : null;
+      lastBelowCountRef.current = null;
+    }
+    const lastVisibleId = timelineVirtualizerApi
+      ? timelineVirtualizerApi.lastVisibleMessageId()
       : isAtBottom
-        ? 0
-        : newMessageCount;
-    const count = below + bufferedTimeline.pendingCount;
+        ? (renderedMessages.at(-1)?.id ?? null)
+        : null;
+    const visibleIndex =
+      lastVisibleId === null ? undefined : messageIndexById.get(lastVisibleId);
+    if (visibleIndex !== undefined) {
+      const visible = renderedMessages[visibleIndex];
+      if (
+        !seenFrontierRef.current ||
+        isAfterFrontier(visible, seenFrontierRef.current)
+      ) {
+        seenFrontierRef.current = {
+          createdAt: visible.createdAt,
+          id: visible.id,
+        };
+      }
+    }
+    const seen = seenFrontierRef.current;
+    let unseen = 0;
+    if (seen) {
+      for (
+        let index = renderedMessages.length - 1;
+        index >= 0 && isAfterFrontier(renderedMessages[index], seen);
+        index -= 1
+      ) {
+        unseen += 1;
+      }
+    }
+    const count = unseen + bufferedTimeline.pendingCount;
     if (count === lastBelowCountRef.current) return;
     lastBelowCountRef.current = count;
     onBelowViewportCountChange(count);
   };
+  // Remember the seen frontier when the app is hidden or the timeline goes
+  // away (a channel switch saves it on the next report).
+  React.useEffect(() => {
+    const save = () => {
+      const seenChannel = seenChannelRef.current;
+      const seen = seenFrontierRef.current;
+      if (seenChannel && seen) writeSeenFrontier(seenChannel, seen);
+    };
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "hidden") save();
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      save();
+    };
+  }, []);
   // biome-ignore lint/correctness/useExhaustiveDependencies: these are the triggers; the reporter reads the current values through its ref.
   React.useEffect(() => {
     reportBelowCountRef.current();
