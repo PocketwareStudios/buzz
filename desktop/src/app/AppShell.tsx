@@ -422,6 +422,38 @@ export function AppShell() {
     },
   );
 
+  // The open channel reports posts below what is on screen; viewing marks a
+  // channel read, so its own unread count is always zero. Show that number
+  // for the active channel instead (the sidebar only renders it for channels
+  // opted in to counts).
+  const [activeBelowCount, setActiveBelowCount] = React.useState<{
+    channelId: string;
+    count: number;
+  } | null>(null);
+  const reportActiveChannelBelowCount = React.useCallback(
+    (channelId: string, count: number) => {
+      setActiveBelowCount((current) =>
+        current?.channelId === channelId && current.count === count
+          ? current
+          : { channelId, count },
+      );
+    },
+    [],
+  );
+  const activeChannelId = activeChannel?.id ?? null;
+  const sidebarUnreadChannelCounts = React.useMemo(() => {
+    if (
+      !activeBelowCount ||
+      activeBelowCount.channelId !== activeChannelId ||
+      activeBelowCount.count === 0
+    ) {
+      return unreadChannelCounts;
+    }
+    const counts = new Map(unreadChannelCounts);
+    counts.set(activeBelowCount.channelId, activeBelowCount.count);
+    return counts;
+  }, [activeBelowCount, activeChannelId, unreadChannelCounts]);
+
   const {
     getThreadReadAt,
     markThreadRead,
@@ -759,6 +791,7 @@ export function AppShell() {
             hasSidebarUnreadProjections: true,
             feedItemState,
             onOpenSettings: handleOpenSettings,
+            reportActiveChannelBelowCount,
           }}
         >
           <AppHuddleShell
@@ -935,7 +968,7 @@ export function AppShell() {
                           unreadChannelIds={unreadChannelIds}
                           {...{ highPriorityUnreadChannelIds }}
                           previewActivityChannelIds={unreadThreadChannelIds}
-                          unreadChannelCounts={unreadChannelCounts}
+                          unreadChannelCounts={sidebarUnreadChannelCounts}
                           mutedChannelIds={mutedChannelIds}
                           onMuteChannel={muteChannel}
                           onUnmuteChannel={unmuteChannel}

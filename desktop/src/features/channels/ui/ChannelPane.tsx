@@ -25,6 +25,7 @@ import {
 } from "@/features/channels/lib/dmHuddleMembers";
 import { buildVideoReviewPresentationByMessageId } from "@/features/messages/lib/videoReviewContext";
 import { useComposerHeightPadding } from "@/features/messages/ui/useComposerHeightPadding";
+import { useAppShell } from "@/app/AppShellContext";
 import { UserProfilePanel } from "@/features/profile/ui/UserProfilePanel";
 import { AgentSessionThreadPanel } from "@/features/channels/ui/AgentSessionThreadPanel";
 import { ChannelManagementAuxiliaryPanel } from "@/features/channels/ui/ChannelManagementAuxiliaryPanel";
@@ -190,6 +191,16 @@ export const ChannelPane = React.memo(function ChannelPane({
   const messageTimelineRef = React.useRef<MessageTimelineHandle>(null);
   const composerWrapperRef = React.useRef<HTMLDivElement>(null);
   const { goChannel } = useAppNavigation();
+  const { reportActiveChannelBelowCount } = useAppShell();
+  const reportedChannelId = activeChannel?.id ?? null;
+  const handleBelowViewportCountChange = React.useCallback(
+    (count: number) => {
+      if (reportedChannelId) {
+        reportActiveChannelBelowCount(reportedChannelId, count);
+      }
+    },
+    [reportActiveChannelBelowCount, reportedChannelId],
+  );
   const prepareDmSendChannel = usePrepareDmSendChannel(
     activeChannel,
     currentPubkey,
@@ -625,6 +636,7 @@ export const ChannelPane = React.memo(function ChannelPane({
             <MessageTimeline
               ref={messageTimelineRef}
               channelId={activeChannel?.id}
+              onBelowViewportCountChange={handleBelowViewportCountChange}
               channelIntro={channelIntro}
               directMessageIntro={directMessageIntro}
               scrollContainerRef={timelineScrollRef}
