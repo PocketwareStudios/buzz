@@ -185,4 +185,56 @@ test.describe("channel unread counts", () => {
       "700",
     );
   });
+
+  test("07 — the open channel counts the posts below the screen", async ({
+    page,
+  }) => {
+    await seedFlag(page, COUNT_STORAGE_KEY, "enabled", ENGINEERING_CHANNEL_ID);
+    await installMockBridge(page);
+    await page.goto("/");
+    await page.getByTestId("channel-engineering").click();
+    await expect(page.getByTestId("chat-title")).toHaveText("engineering");
+    await waitForMockLiveSubscription(page, "engineering");
+    const timeline = page.getByTestId("message-timeline");
+    await timeline.hover();
+    await page.mouse.wheel(0, 5000);
+    await emitPosts(page, "engineering", 40);
+    await page.waitForTimeout(500);
+    const badge = page.getByTestId("channel-unread-engineering");
+    // At the bottom nothing is below the screen.
+    await expect(badge).toHaveCount(0);
+
+    // Scrolling up leaves posts below: the open channel shows how many.
+    for (let i = 0; i < 3; i += 1) await page.mouse.wheel(0, -400);
+    await expect(badge).toBeVisible();
+    // Let scrolling and row measurement settle: read until two reads agree.
+    const readCount = async () =>
+      Number((await badge.innerText()).split(/\s/)[0]);
+    let scrolledUp = -1;
+    await expect
+      .poll(async () => {
+        const previous = scrolledUp;
+        await page.waitForTimeout(300);
+        scrolledUp = await readCount();
+        return scrolledUp === previous;
+      })
+      .toBe(true);
+    expect(scrolledUp).toBeGreaterThan(0);
+
+    // New posts arriving while scrolled up add to it.
+    await emitPosts(page, "engineering", 3);
+    await expect.poll(readCount).toBe(scrolledUp + 3);
+
+    // Reaching the bottom clears it. Posts held back while scrolled up are
+    // released by the trackpad's momentum at the floor (the first arrival is
+    // deliberately ignored); emulate it with a nudge up and back down.
+    await page.mouse.wheel(0, 5000);
+    await page.waitForTimeout(300);
+    await page.mouse.wheel(0, -60);
+    await page.waitForTimeout(150);
+    await page.mouse.wheel(0, 5000);
+    await page.waitForTimeout(500);
+    await page.mouse.wheel(0, 5000);
+    await expect(badge).toHaveCount(0);
+  });
 });

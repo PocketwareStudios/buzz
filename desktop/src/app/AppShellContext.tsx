@@ -80,6 +80,10 @@ type AppShellContextValue = {
   // that render under AppShell (channel, home, projects, pulse, agents).
   // Used by config-nudge cards to deep-link to Settings → Agents.
   onOpenSettings: ((section: SettingsSection) => void) | null;
+  // The open channel reports how many posts are below what is on screen
+  // (not yet scrolled to). The sidebar shows it as that channel's unread
+  // count, since viewing a channel marks it read.
+  reportActiveChannelBelowCount: (channelId: string, count: number) => void;
 };
 
 const AppShellContext = React.createContext<AppShellContextValue>({
@@ -120,6 +124,7 @@ const AppShellContext = React.createContext<AppShellContextValue>({
     unreadSet: EMPTY_SET,
   },
   onOpenSettings: null,
+  reportActiveChannelBelowCount: () => {},
 });
 
 export function AppShellProvider({

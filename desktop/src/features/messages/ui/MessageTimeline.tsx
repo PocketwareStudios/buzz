@@ -126,6 +126,9 @@ type MessageTimelineProps = {
   /** Where opening the channel resumes reading (the oldest unread post when
    *  there was a read position), or null to start at the newest post. */
   resumeMessageId?: string | null;
+  /** Reports how many posts are below what is on screen (not yet scrolled
+   *  to, including live posts held back while scrolled up), when it changes. */
+  onBelowViewportCountChange?: (count: number) => void;
   /** Count of unread top-level messages at channel open. */
   unreadCount?: number;
   /** Per-thread unread counts keyed by thread root id. */
@@ -217,6 +220,7 @@ const MessageTimelineBase = React.forwardRef<
     splitThreadPanelOpen = false,
     firstUnreadMessageId = null,
     resumeMessageId: resumeMessageIdProp = null,
+    onBelowViewportCountChange,
     unreadCount = 0,
     threadUnreadCounts,
   }: MessageTimelineProps,
@@ -432,8 +436,37 @@ const MessageTimelineBase = React.forwardRef<
     },
     [],
   );
+  // Posts below the viewport, reported to the shell for the sidebar count.
+  // Read from the virtualizer on each scroll report and message change;
+  // only changes are reported.
+  const lastBelowCountRef = React.useRef<number | null>(null);
+  const reportBelowCountRef = React.useRef(() => {});
+  reportBelowCountRef.current = () => {
+    if (!onBelowViewportCountChange) return;
+    const below = timelineVirtualizerApi
+      ? timelineVirtualizerApi.belowViewportMessageCount()
+      : isAtBottom
+        ? 0
+        : newMessageCount;
+    const count = below + bufferedTimeline.pendingCount;
+    if (count === lastBelowCountRef.current) return;
+    lastBelowCountRef.current = count;
+    onBelowViewportCountChange(count);
+  };
+  // biome-ignore lint/correctness/useExhaustiveDependencies: these are the triggers; the reporter reads the current values through its ref.
+  React.useEffect(() => {
+    reportBelowCountRef.current();
+  }, [
+    bufferedTimeline.pendingCount,
+    channelId,
+    isAtBottom,
+    renderedMessages,
+    virtualizerRenderVersion,
+  ]);
+
   const handleVirtualizerAtBottomStateChange = React.useCallback(
     (atBottom: boolean) => {
+      reportBelowCountRef.current();
       // Virtua can emit an intermediate non-bottom offset while its initial
       // scroll-to-end is still converging. Do not turn that mount transient
       // into a semantic dataset freeze: wait until this channel has reached a

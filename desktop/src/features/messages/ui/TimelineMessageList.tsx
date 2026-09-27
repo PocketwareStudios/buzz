@@ -45,6 +45,8 @@ export type TimelineVirtualizerApi = {
   /** The message at the top of the viewport and its distance below the
    *  viewport top, read from the virtualizer (no DOM walk); null when none. */
   readingPosition: () => { messageId: string; topOffset: number } | null;
+  /** Messages in rows below the viewport, read from the virtualizer. */
+  belowViewportMessageCount: () => number;
 };
 
 type TimelineMessageListProps = {
@@ -657,6 +659,22 @@ function VirtualizedTimelineRows({
   messageItemIndexByIdRef.current = messageItemIndexById;
   const firstMessageIdByItemIndexRef = React.useRef(firstMessageIdByItemIndex);
   firstMessageIdByItemIndexRef.current = firstMessageIdByItemIndex;
+  // messagesFromIndex[i]: messages in rows i..end, for the below-viewport
+  // count without walking rows on every scroll.
+  const messagesFromIndex = React.useMemo(() => {
+    const counts = new Array<number>(items.length + 1).fill(0);
+    for (let index = items.length - 1; index >= 0; index -= 1) {
+      const item = items[index];
+      counts[index] =
+        counts[index + 1] +
+        (item.kind === "timeline-item"
+          ? timelineItemMessageIds(item.item).length
+          : 0);
+    }
+    return counts;
+  }, [items]);
+  const messagesFromIndexRef = React.useRef(messagesFromIndex);
+  messagesFromIndexRef.current = messagesFromIndex;
 
   React.useLayoutEffect(() => {
     const scroller = hostRef.current?.firstElementChild;
@@ -712,6 +730,16 @@ function VirtualizedTimelineRows({
           }
         }
         return null;
+      },
+      belowViewportMessageCount() {
+        const list = listRef.current;
+        if (!list) return 0;
+        const counts = messagesFromIndexRef.current;
+        // The row under the viewport's bottom edge counts as seen.
+        const lastVisible = list.findItemIndex(
+          list.scrollOffset + list.viewportSize - 1,
+        );
+        return counts[Math.max(0, lastVisible + 1)] ?? 0;
       },
     };
     onVirtualizerApiChange(api);
