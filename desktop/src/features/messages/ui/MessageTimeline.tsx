@@ -358,6 +358,7 @@ const MessageTimelineBase = React.forwardRef<
     onScroll,
     scrollToBottom,
     scrollToBottomOnNextUpdate,
+    holdPositionOnNextAppend,
     scrollToMessage,
     onVirtualizerAtBottomStateChange,
   } = useAnchoredScroll({
@@ -384,6 +385,8 @@ const MessageTimelineBase = React.forwardRef<
     hasConfirmedVirtualizerBottomRef.current = false;
   }
   const suppressNextSemanticBottomRef = React.useRef(false);
+  const pendingCountRef = React.useRef(bufferedTimeline.pendingCount);
+  pendingCountRef.current = bufferedTimeline.pendingCount;
   const semanticAtBottomRef = React.useRef(isSemanticallyAtBottom);
   semanticAtBottomRef.current = isSemanticallyAtBottom;
   const semanticBottomRafRef = React.useRef<number | null>(null);
@@ -420,6 +423,10 @@ const MessageTimelineBase = React.forwardRef<
           // not immediately release the snapshot and oscillate forever.
           suppressNextSemanticBottomRef.current = false;
         } else if (!semanticAtBottomRef.current) {
+          // The reader scrolled back down to the floor of what they had
+          // already seen. Held-back posts join below it without pulling the
+          // view to their end, so reading continues from the first new post.
+          if (pendingCountRef.current > 0) holdPositionOnNextAppend();
           queueSemanticBottom(true);
         }
       } else if (hasConfirmedVirtualizerBottomRef.current) {
@@ -430,7 +437,11 @@ const MessageTimelineBase = React.forwardRef<
         }
       }
     },
-    [onVirtualizerAtBottomStateChange, queueSemanticBottom],
+    [
+      holdPositionOnNextAppend,
+      onVirtualizerAtBottomStateChange,
+      queueSemanticBottom,
+    ],
   );
 
   const timelineIntroSurface = showTimelineError

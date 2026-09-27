@@ -76,6 +76,11 @@ type UseAnchoredScrollResult = {
   /** Re-pins after a layout owner changes trailing geometry. Returns true when
    *  the hook handled the settlement, including a preserved pinned target. */
   settleAtBottomAfterLayout: () => boolean;
+  /** Arm a one-shot: the next appended messages join below the reader instead
+   *  of pulling the view to the new floor. Used when output that was held
+   *  back while the reader was scrolled up is released at the old floor, so
+   *  the reader continues from the first new post. */
+  holdPositionOnNextAppend: () => void;
   /** Arm a one-shot scroll-to-bottom that fires on the next appended message
    *  (used by the composer's send flow). */
   scrollToBottomOnNextUpdate: () => void;
@@ -198,6 +203,10 @@ export function useAnchoredScroll({
   // appends, we snap to bottom even if they had scrolled up to read history.
   // Consumed (and cleared) by the next append in the restoration effect.
   const forceBottomOnNextAppendRef = React.useRef(false);
+  // One-shot, the opposite of the above: released held-back output appends
+  // below the reading position without re-pinning to the floor. Consumed (and
+  // cleared) by the next message commit, whatever it contains.
+  const holdPositionOnNextAppendRef = React.useRef(false);
   // True from a programmatic bottom pin until the list's row measurement settles
   // and the view reaches a true physical bottom. During this window `onScroll`
   // ignores transient gaps and keeps chasing the floor. A `ref`, not state — the
@@ -227,6 +236,7 @@ export function useAnchoredScroll({
     prevMessagesRef.current = [];
     handledTargetIdRef.current = null;
     forceBottomOnNextAppendRef.current = false;
+    holdPositionOnNextAppendRef.current = false;
     settlingRef.current = false;
     programmaticScrollTopRef.current = null;
     isWritingScrollRef.current = false;
@@ -384,6 +394,10 @@ export function useAnchoredScroll({
   // outbound message pulls the view down even if they'd scrolled up.
   const scrollToBottomOnNextUpdate = React.useCallback(() => {
     forceBottomOnNextAppendRef.current = true;
+  }, []);
+
+  const holdPositionOnNextAppend = React.useCallback(() => {
+    holdPositionOnNextAppendRef.current = true;
   }, []);
 
   const settleAtBottomAfterLayout = React.useCallback(() => {
@@ -697,6 +711,28 @@ export function useAnchoredScroll({
       return;
     }
 
+    if (messages !== prevMessages && holdPositionOnNextAppendRef.current) {
+      holdPositionOnNextAppendRef.current = false;
+      if (
+        messagesArrived > 0 &&
+        !isPrepend &&
+        anchor.kind !== "pinned-center"
+      ) {
+        // Output held back while the reader was scrolled up joins below the
+        // old floor. Keep the reader where they are so they read on from the
+        // first new post; the new-messages affordance still jumps to latest.
+        virtualizerAtBottomRef.current = false;
+        anchorRef.current = computeAnchor(container, false);
+        setIsAtBottom(false);
+        setNewMessageCount((current) => current + messagesArrived);
+        prevLastMessageIdRef.current = lastMessage?.id;
+        prevFirstMessageIdRef.current = firstMessage?.id;
+        prevMessageCountRef.current = messages.length;
+        prevMessagesRef.current = messages;
+        return;
+      }
+    }
+
     if (anchor.kind === "pinned-center") {
       repinPinnedCenter();
     } else if (anchor.kind === "at-bottom") {
@@ -968,6 +1004,7 @@ export function useAnchoredScroll({
     scrollToBottom: scrollToBottomImperative,
     settleAtBottomAfterLayout,
     scrollToBottomOnNextUpdate,
+    holdPositionOnNextAppend,
     scrollToMessage: scrollToMessageImperative,
     onVirtualizerAtBottomStateChange,
   };
