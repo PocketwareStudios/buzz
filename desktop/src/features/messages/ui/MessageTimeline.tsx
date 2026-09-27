@@ -355,6 +355,15 @@ const MessageTimelineBase = React.forwardRef<
     scrollElementRef: activeScrollContainerRef,
   });
 
+  // Older-page loads for restoring a reading position a head refresh dropped.
+  // Assigned once the load-older inputs are known (below); stable identity.
+  const requestOlderRef = React.useRef<
+    () => "requested" | "busy" | "exhausted"
+  >(() => "exhausted");
+  const requestOlderForRestore = React.useCallback(
+    () => requestOlderRef.current(),
+    [],
+  );
   // Where a freshly opened channel starts when nothing else owns the viewport:
   // the oldest unread post (open-time frontier), so reading resumes instead of
   // landing on the newest post. Deep links and search keep their own target.
@@ -377,6 +386,8 @@ const MessageTimelineBase = React.forwardRef<
     channelId,
     contentRef,
     initialMessageId: resumeMessageId,
+    virtualReadingPosition: timelineVirtualizerApi?.readingPosition,
+    requestOlder: requestOlderForRestore,
     isLoading: showTimelineSkeleton,
     messages: renderedMessages,
     onTargetReached,
@@ -633,6 +644,15 @@ const MessageTimelineBase = React.forwardRef<
     searchActiveMessageId,
     showTimelineSkeleton,
   ]);
+
+  requestOlderRef.current = () => {
+    if (!fetchOlder || !hasOlderMessages) return "exhausted";
+    if (isFetchingOlder || isHoldingPrepend || showTimelineSkeleton) {
+      return "busy";
+    }
+    void fetchOlder();
+    return "requested";
+  };
 
   useLoadOlderOnScroll({
     fetchOlder: useTimelineVirtualizer ? undefined : fetchOlder,
