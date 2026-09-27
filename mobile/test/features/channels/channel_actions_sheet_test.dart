@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:buzz/features/channels/channel.dart';
 import 'package:buzz/features/channels/channel_actions_sheet.dart';
 import 'package:buzz/features/channels/channel_management_provider.dart';
+import 'package:buzz/features/channels/channel_unread_counts/channel_unread_counts_provider.dart';
+import 'package:buzz/features/channels/channel_unread_counts/channel_unread_counts_storage.dart';
 import 'package:buzz/features/channels/channel_sections/channel_sections_provider.dart';
 import 'package:buzz/features/channels/channel_sections/channel_sections_storage.dart';
 import 'package:buzz/features/channels/manage_channel_sheet.dart';
@@ -120,6 +122,7 @@ void main() {
       'Mark Unread',
       'Move to section…',
       'Mute channel',
+      'Show unread count',
       'Manage channel',
       'Copy channel name',
       'Copy channel ID',
@@ -132,11 +135,13 @@ void main() {
 
     final moveTop = tester.getTopLeft(find.text('Move to section…')).dy;
     final muteTop = tester.getTopLeft(find.text('Mute channel')).dy;
+    final countTop = tester.getTopLeft(find.text('Show unread count')).dy;
     final manageTop = tester.getTopLeft(find.text('Manage channel')).dy;
     final copyNameTop = tester.getTopLeft(find.text('Copy channel name')).dy;
     final copyIdTop = tester.getTopLeft(find.text('Copy channel ID')).dy;
     expect(moveTop, lessThan(muteTop));
-    expect(muteTop, lessThan(manageTop));
+    expect(muteTop, lessThan(countTop));
+    expect(countTop, lessThan(manageTop));
     expect(manageTop, lessThan(copyNameTop));
     expect(copyNameTop, lessThan(copyIdTop));
   });
@@ -481,6 +486,53 @@ void main() {
     );
   });
 
+  Future<void> pumpCountSheet(
+    WidgetTester tester,
+    _RecordingUnreadCountsNotifier notifier,
+  ) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          currentPubkeyProvider.overrideWith((ref) => _currentPubkey),
+          channelMembersProvider(
+            'channel-id',
+          ).overrideWith((ref) async => const <ChannelMember>[]),
+          agentOwnersProvider.overrideWithValue(
+            const AsyncValue.data(<String, String>{}),
+          ),
+          channelUnreadCountsProvider.overrideWith(() => notifier),
+        ],
+        child: MaterialApp(
+          theme: AppTheme.light(),
+          home: Scaffold(
+            body: ChannelActionsSheet(channel: _channel(), isUnread: false),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+  }
+
+  testWidgets('Show unread count turns the count on', (tester) async {
+    final notifier = _RecordingUnreadCountsNotifier();
+    await pumpCountSheet(tester, notifier);
+
+    expect(find.text('Hide unread count'), findsNothing);
+    await tester.tap(find.text('Show unread count'));
+    await tester.pumpAndSettle();
+    expect(notifier.calls, ['show channel-id']);
+  });
+
+  testWidgets('Hide unread count turns an enabled count off', (tester) async {
+    final notifier = _RecordingUnreadCountsNotifier({'channel-id'});
+    await pumpCountSheet(tester, notifier);
+
+    expect(find.text('Show unread count'), findsNothing);
+    await tester.tap(find.text('Hide unread count'));
+    await tester.pumpAndSettle();
+    expect(notifier.calls, ['hide channel-id']);
+  });
+
   testWidgets('DM omits quick actions, then shows mute and copy rows', (
     tester,
   ) async {
@@ -502,6 +554,8 @@ void main() {
     for (final label in [
       'Star',
       'Unstar',
+      'Show unread count',
+      'Hide unread count',
       'Mark Unread',
       'Mark Read',
       'Move to section…',
@@ -567,5 +621,40 @@ class _FakeChannelActions extends ChannelActions {
   @override
   Future<void> unarchiveChannel(String channelId) async {
     unarchivedChannelId = channelId;
+  }
+}
+
+class _RecordingUnreadCountsNotifier extends ChannelUnreadCountsNotifier {
+  _RecordingUnreadCountsNotifier([Set<String> enabled = const {}])
+    : _enabled = {...enabled};
+
+  final calls = <String>[];
+  final Set<String> _enabled;
+
+  @override
+  ChannelUnreadCountsState build() => _state();
+
+  ChannelUnreadCountsState _state() => ChannelUnreadCountsState(
+    isReady: true,
+    store: ChannelUnreadCountStore(
+      channels: {
+        for (final id in _enabled)
+          id: ChannelUnreadCountEntry(enabled: true, updatedAt: 1),
+      },
+    ),
+  );
+
+  @override
+  void showUnreadCount(String channelId) {
+    calls.add('show $channelId');
+    _enabled.add(channelId);
+    state = _state();
+  }
+
+  @override
+  void hideUnreadCount(String channelId) {
+    calls.add('hide $channelId');
+    _enabled.remove(channelId);
+    state = _state();
   }
 }

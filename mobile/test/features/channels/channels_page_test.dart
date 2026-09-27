@@ -13,6 +13,10 @@ import 'package:buzz/features/channels/channel_management_provider.dart';
 import 'package:buzz/features/channels/channel_sections/channel_sections_provider.dart';
 import 'package:buzz/features/channels/channel_sections/channel_sections_storage.dart';
 import 'package:buzz/features/channels/channels_page.dart';
+import 'package:buzz/features/channels/channel_mutes/channel_mutes_provider.dart';
+import 'package:buzz/features/channels/channel_mutes/channel_mutes_storage.dart';
+import 'package:buzz/features/channels/channel_unread_counts/channel_unread_counts_provider.dart';
+import 'package:buzz/features/channels/channel_unread_counts/channel_unread_counts_storage.dart';
 import 'package:buzz/features/channels/channels_provider.dart';
 import 'package:buzz/shared/read_state/read_state_provider.dart';
 import 'package:buzz/features/channels/unread_badge/observed_unread_event.dart';
@@ -2304,6 +2308,104 @@ void main() {
     );
   });
 
+  group('opt-in unread counts', () {
+    List<Channel> newsChannel() => [
+      Channel(
+        id: '1',
+        name: 'news',
+        channelType: 'stream',
+        visibility: 'open',
+        description: '',
+        createdBy: 'abc',
+        createdAt: DateTime(2025),
+        memberCount: 2,
+        lastMessageAt: DateTime.fromMillisecondsSinceEpoch(
+          40 * 1000,
+          isUtc: true,
+        ),
+        isMember: true,
+      ),
+    ];
+    _FakeReadStateNotifier readState() => _FakeReadStateNotifier(
+      const ReadStateState(
+        isReady: true,
+        pubkey: 'pk',
+        contexts: {'1': 10},
+        version: 0,
+      ),
+    );
+    List<Override> overrides(
+      _FakeReadStateNotifier readState, {
+      bool optedIn = true,
+      bool muted = false,
+    }) => [
+      channelsProvider.overrideWith(
+        () => _FakeNotifier(
+          newsChannel(),
+          observedEventsByChannel: {
+            '1': [
+              _observed(id: 'post-1', createdAt: 20),
+              _observed(id: 'post-2', createdAt: 30),
+              _observed(id: 'post-3', createdAt: 40),
+            ],
+          },
+        ),
+      ),
+      readStateProvider.overrideWith(() => readState),
+      channelUnreadCountsProvider.overrideWith(
+        () => _FakeUnreadCountsNotifier({if (optedIn) '1'}),
+      ),
+      channelMutesProvider.overrideWith(
+        () => _FakeMutesNotifier({if (muted) '1'}),
+      ),
+    ];
+    final badge = find.byKey(const ValueKey('channel-unread-count-1'));
+
+    testWidgets('an opted-in channel shows its unread count until read', (
+      tester,
+    ) async {
+      final semantics = tester.ensureSemantics();
+      final state = readState();
+      await tester.pumpWidget(buildTestable(overrides: overrides(state)));
+      await tester.pumpAndSettle();
+
+      expect(find.descendant(of: badge, matching: find.text('3')), findsOne);
+      expect(
+        find.bySemanticsLabel(RegExp(r'\b3 unread messages\b')),
+        findsOneWidget,
+      );
+
+      state.markContextRead('1', 40);
+      await tester.pump();
+      expect(badge, findsNothing);
+      semantics.dispose();
+    });
+
+    testWidgets('a channel that did not opt in shows no number', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        buildTestable(overrides: overrides(readState(), optedIn: false)),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        tester.widget<Text>(find.text('news')).style?.fontWeight,
+        FontWeight.w700,
+      );
+      expect(badge, findsNothing);
+    });
+
+    testWidgets('mute wins over an opted-in count', (tester) async {
+      await tester.pumpWidget(
+        buildTestable(overrides: overrides(readState(), muted: true)),
+      );
+      await tester.pumpAndSettle();
+
+      expect(badge, findsNothing);
+    });
+  });
+
   testWidgets('bolds channels with unread thread activity without a badge', (
     tester,
   ) async {
@@ -2755,4 +2857,38 @@ String _dmTileAvatarInitial(WidgetTester tester, String labelText) {
     find.descendant(of: avatar, matching: find.byType(Text)),
   );
   return initial.data!;
+}
+
+class _FakeUnreadCountsNotifier extends ChannelUnreadCountsNotifier {
+  _FakeUnreadCountsNotifier(this._enabled);
+
+  final Set<String> _enabled;
+
+  @override
+  ChannelUnreadCountsState build() => ChannelUnreadCountsState(
+    isReady: true,
+    store: ChannelUnreadCountStore(
+      channels: {
+        for (final id in _enabled)
+          id: ChannelUnreadCountEntry(enabled: true, updatedAt: 1),
+      },
+    ),
+  );
+}
+
+class _FakeMutesNotifier extends ChannelMutesNotifier {
+  _FakeMutesNotifier(this._muted);
+
+  final Set<String> _muted;
+
+  @override
+  ChannelMutesState build() => ChannelMutesState(
+    isReady: true,
+    store: ChannelMuteStore(
+      channels: {
+        for (final id in _muted)
+          id: ChannelMuteEntry(muted: true, updatedAt: 1),
+      },
+    ),
+  );
 }

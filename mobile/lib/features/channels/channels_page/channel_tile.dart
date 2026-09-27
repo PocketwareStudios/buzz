@@ -4,6 +4,10 @@ class _ChannelTile extends ConsumerWidget {
   final Channel channel;
   final bool isUnread;
   final bool isMuted;
+
+  /// Unread messages to show as a number, for a channel the user opted in to
+  /// counts. Null shows none.
+  final int? unreadCount;
   final String? currentPubkey;
   final VoidCallback onTap;
 
@@ -20,6 +24,7 @@ class _ChannelTile extends ConsumerWidget {
     required this.currentPubkey,
     required this.onTap,
     this.isMuted = false,
+    this.unreadCount,
     this.onMarkRead,
     this.sectionId,
   });
@@ -79,6 +84,10 @@ class _ChannelTile extends ConsumerWidget {
                 ],
               ),
             ),
+            if (unreadCount case final count? when count > 0) ...[
+              const SizedBox(width: Grid.xxs),
+              _UnreadCountBadge(channelId: channel.id, count: count),
+            ],
             if (channel.isEphemeral) ...[
               const SizedBox(width: Grid.xxs),
               _EphemeralBadge(channel: channel),
@@ -246,5 +255,41 @@ class _DmAvatar extends ConsumerWidget {
       'away' => context.appColors.warning,
       _ => context.colors.outline,
     };
+  }
+}
+
+class _UnreadCountBadge extends StatelessWidget {
+  final String channelId;
+  final int count;
+
+  const _UnreadCountBadge({required this.channelId, required this.count});
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      label: '$count unread message${count == 1 ? '' : 's'}',
+      excludeSemantics: true,
+      child: Container(
+        key: ValueKey('channel-unread-count-$channelId'),
+        constraints: const BoxConstraints(minWidth: 20),
+        padding: const EdgeInsets.symmetric(
+          horizontal: Grid.half + Grid.quarter,
+          vertical: Grid.quarter,
+        ),
+        decoration: BoxDecoration(
+          color: context.colors.primary,
+          borderRadius: BorderRadius.circular(Radii.full),
+        ),
+        child: Text(
+          count > 99 ? '99+' : '$count',
+          textAlign: TextAlign.center,
+          style: context.textTheme.labelSmall?.copyWith(
+            color: context.colors.onPrimary,
+            fontWeight: FontWeight.w600,
+            fontFeatures: const [FontFeature.tabularFigures()],
+          ),
+        ),
+      ),
+    );
   }
 }

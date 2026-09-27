@@ -1,14 +1,14 @@
-import 'dart:convert';
-
 import 'package:shared_preferences/shared_preferences.dart';
 
-String channelStarsKey(String pubkey) => 'buzz.channel-stars.v1:$pubkey';
+import '../channel_flags/channel_flag_store.dart';
 
-class ChannelStarEntry {
-  final bool starred;
-  final int updatedAt;
+String channelStarsKey(String pubkey) => channelStarsSpec.storageKey(pubkey);
 
-  const ChannelStarEntry({required this.starred, required this.updatedAt});
+class ChannelStarEntry extends ChannelFlagEntry {
+  const ChannelStarEntry({required bool starred, required super.updatedAt})
+    : super(value: starred);
+
+  bool get starred => value;
 
   Map<String, dynamic> toJson() => {'starred': starred, 'updatedAt': updatedAt};
 
@@ -19,72 +19,29 @@ class ChannelStarEntry {
       );
 }
 
-class ChannelStarStore {
-  final int version;
-  final Map<String, ChannelStarEntry> channels;
+class ChannelStarStore extends ChannelFlagStore<ChannelStarEntry> {
+  const ChannelStarStore({super.version, super.channels});
 
-  const ChannelStarStore({this.version = 1, this.channels = const {}});
+  Map<String, dynamic> toJson() => toJsonWithField('starred');
 
-  Map<String, dynamic> toJson() => {
-    'version': version,
-    'channels': {for (final e in channels.entries) e.key: e.value.toJson()},
-  };
-
-  factory ChannelStarStore.fromJson(Map<String, dynamic> json) {
-    final rawChannels = json['channels'];
-    final channels = <String, ChannelStarEntry>{};
-    if (rawChannels is Map) {
-      for (final entry in rawChannels.entries) {
-        if (entry.key is String && entry.value is Map<String, dynamic>) {
-          final v = entry.value as Map<String, dynamic>;
-          if (v['starred'] is bool && v['updatedAt'] is int) {
-            channels[entry.key as String] = ChannelStarEntry.fromJson(v);
-          }
-        }
-      }
-    }
-    return ChannelStarStore(version: 1, channels: channels);
-  }
+  factory ChannelStarStore.fromJson(Map<String, dynamic> json) =>
+      channelStarsSpec.fromJson(json);
 }
 
-ChannelStarStore mergeStores(ChannelStarStore local, ChannelStarStore remote) {
-  // Per-channel max-updatedAt merge:
-  // For each channel ID in the union, keep the entry with the highest updatedAt.
-  final merged = <String, ChannelStarEntry>{...local.channels};
-  for (final entry in remote.channels.entries) {
-    final existing = merged[entry.key];
-    if (existing == null || entry.value.updatedAt > existing.updatedAt) {
-      merged[entry.key] = entry.value;
-    }
-  }
-  return ChannelStarStore(channels: merged);
-}
+final channelStarsSpec = ChannelFlagSpec<ChannelStarEntry, ChannelStarStore>(
+  field: 'starred',
+  storageKeyPrefix: 'buzz.channel-stars.v1',
+  dTag: 'channel-stars',
+  logName: 'ChannelStarsManager',
+  entry: (value, updatedAt) =>
+      ChannelStarEntry(starred: value, updatedAt: updatedAt),
+  store: (channels) => ChannelStarStore(channels: channels),
+);
 
-class ChannelStarsStorage {
-  final SharedPreferences _prefs;
+ChannelStarStore mergeStores(ChannelStarStore local, ChannelStarStore remote) =>
+    channelStarsSpec.merge(local, remote);
 
-  ChannelStarsStorage(this._prefs);
-
-  ChannelStarStore read(String pubkey) {
-    final raw = _prefs.getString(channelStarsKey(pubkey));
-    if (raw == null || raw.isEmpty) {
-      return const ChannelStarStore();
-    }
-
-    try {
-      final parsed = jsonDecode(raw);
-      if (parsed is! Map<String, dynamic>) {
-        return const ChannelStarStore();
-      }
-      if (parsed['version'] != 1) {
-        return const ChannelStarStore();
-      }
-      return ChannelStarStore.fromJson(parsed);
-    } catch (_) {
-      return const ChannelStarStore();
-    }
-  }
-
-  Future<bool> write(String pubkey, ChannelStarStore store) =>
-      _prefs.setString(channelStarsKey(pubkey), jsonEncode(store.toJson()));
+class ChannelStarsStorage
+    extends ChannelFlagStorage<ChannelStarEntry, ChannelStarStore> {
+  ChannelStarsStorage(SharedPreferences prefs) : super(channelStarsSpec, prefs);
 }
