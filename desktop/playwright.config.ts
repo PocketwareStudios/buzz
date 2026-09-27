@@ -96,6 +96,7 @@ export default defineConfig({
         "**/identity-archive-hide.spec.ts",
         "**/relay-connectivity.spec.ts",
         "**/unread-pill.spec.ts",
+        "**/resume-reading-position.spec.ts",
         "**/sidebar-more-unread-overlap.spec.ts",
         "**/sidebar-snapshot.spec.ts",
         "**/home-collapsed-top-chrome.spec.ts",
