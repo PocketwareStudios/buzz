@@ -186,7 +186,7 @@ test.describe("channel unread counts", () => {
     );
   });
 
-  test("07 — the open channel counts the posts below the screen", async ({
+  test("07 — the open channel counts posts not yet on screen", async ({
     page,
   }) => {
     await seedFlag(page, COUNT_STORAGE_KEY, "enabled", ENGINEERING_CHANNEL_ID);
@@ -201,29 +201,26 @@ test.describe("channel unread counts", () => {
     await emitPosts(page, "engineering", 40);
     await page.waitForTimeout(500);
     const badge = page.getByTestId("channel-unread-engineering");
-    // At the bottom nothing is below the screen.
+    const readCount = async () =>
+      (await badge.count()) === 0
+        ? 0
+        : Number((await badge.innerText()).split(/\s/)[0]);
+    // At the bottom every post has been on screen.
     await expect(badge).toHaveCount(0);
 
-    // Scrolling up leaves posts below: the open channel shows how many.
+    // Scrolling back up to posts already seen does not make them count.
     for (let i = 0; i < 3; i += 1) await page.mouse.wheel(0, -400);
-    await expect(badge).toBeVisible();
-    // Let scrolling and row measurement settle: read until two reads agree.
-    const readCount = async () =>
-      Number((await badge.innerText()).split(/\s/)[0]);
-    let scrolledUp = -1;
-    await expect
-      .poll(async () => {
-        const previous = scrolledUp;
-        await page.waitForTimeout(300);
-        scrolledUp = await readCount();
-        return scrolledUp === previous;
-      })
-      .toBe(true);
-    expect(scrolledUp).toBeGreaterThan(0);
+    await page.waitForTimeout(800);
+    await expect(badge).toHaveCount(0);
 
-    // New posts arriving while scrolled up add to it.
+    // New posts arriving while scrolled up count.
     await emitPosts(page, "engineering", 3);
-    await expect.poll(readCount).toBe(scrolledUp + 3);
+    await expect.poll(readCount).toBe(3);
+
+    // Scrolling further up does not add the seen posts in between.
+    for (let i = 0; i < 3; i += 1) await page.mouse.wheel(0, -400);
+    await page.waitForTimeout(800);
+    expect(await readCount()).toBe(3);
 
     // Reaching the bottom clears it. Posts held back while scrolled up are
     // released by the trackpad's momentum at the floor (the first arrival is
@@ -235,6 +232,11 @@ test.describe("channel unread counts", () => {
     await page.mouse.wheel(0, 5000);
     await page.waitForTimeout(500);
     await page.mouse.wheel(0, 5000);
+    await expect(badge).toHaveCount(0);
+
+    // Posts seen stay seen: scrolling up again leaves it clear.
+    for (let i = 0; i < 6; i += 1) await page.mouse.wheel(0, -400);
+    await page.waitForTimeout(800);
     await expect(badge).toHaveCount(0);
   });
 });
