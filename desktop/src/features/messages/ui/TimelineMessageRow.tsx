@@ -18,6 +18,8 @@ type ToggleReaction = (
 ) => Promise<void>;
 
 type SystemRowProps = {
+  channelId?: string | null;
+  hideTombstonesChannelIds?: ReadonlySet<string>;
   currentPubkey?: string;
   entries?: MainTimelineEntry[];
   entry?: MainTimelineEntry;
@@ -28,6 +30,8 @@ type SystemRowProps = {
 };
 
 export function SystemRow({
+  channelId,
+  hideTombstonesChannelIds,
   currentPubkey,
   entries,
   entry,
@@ -47,6 +51,8 @@ export function SystemRow({
   return (
     <div className="flex flex-col gap-1 pb-2.5">
       <SystemMessageRow
+        channelId={channelId}
+        hideTombstonesChannelIds={hideTombstonesChannelIds}
         groupedMessages={groupedMessages}
         message={firstEntry.message}
         currentPubkey={currentPubkey}

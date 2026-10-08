@@ -146,6 +146,9 @@ export function AppSidebar({
   unreadCountChannelIds,
   onShowUnreadCount,
   onHideUnreadCount,
+  hideTombstonesChannelIds,
+  onHideTombstones,
+  onShowTombstones,
 }: AppSidebarProps) {
   const activeWorkingByChannelId = useActiveWorkingChannelsById();
   const { status: updateStatus } = useUpdaterContext();
@@ -622,6 +625,9 @@ export function AppSidebar({
                       unreadCountChannelIds={unreadCountChannelIds}
                       onShowUnreadCount={onShowUnreadCount}
                       onHideUnreadCount={onHideUnreadCount}
+                      hideTombstonesChannelIds={hideTombstonesChannelIds}
+                      onHideTombstones={onHideTombstones}
+                      onShowTombstones={onShowTombstones}
                       onDeleteChannel={requestDeleteChannel}
                       onLeaveChannel={requestLeaveChannel}
                     />
@@ -695,6 +701,9 @@ export function AppSidebar({
                         unreadCountChannelIds={unreadCountChannelIds}
                         onShowUnreadCount={onShowUnreadCount}
                         onHideUnreadCount={onHideUnreadCount}
+                        hideTombstonesChannelIds={hideTombstonesChannelIds}
+                        onHideTombstones={onHideTombstones}
+                        onShowTombstones={onShowTombstones}
                         onDeleteChannel={requestDeleteChannel}
                         onLeaveChannel={requestLeaveChannel}
                       />
@@ -738,6 +747,9 @@ export function AppSidebar({
                       unreadCountChannelIds={unreadCountChannelIds}
                       onShowUnreadCount={onShowUnreadCount}
                       onHideUnreadCount={onHideUnreadCount}
+                      hideTombstonesChannelIds={hideTombstonesChannelIds}
+                      onHideTombstones={onHideTombstones}
+                      onShowTombstones={onShowTombstones}
                       onDeleteChannel={requestDeleteChannel}
                       onLeaveChannel={requestLeaveChannel}
                     />

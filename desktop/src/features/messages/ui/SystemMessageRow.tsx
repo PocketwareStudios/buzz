@@ -506,6 +506,7 @@ function describeSystemEvent(
   profiles: UserProfileLookup | undefined,
   personaLookup?: Map<string, string>,
   agentPubkeys?: ReadonlySet<string>,
+  hideTombstones?: boolean,
 ): SystemMessageDescription | null {
   const isTargetCurrentUser =
     currentPubkey !== undefined &&
@@ -630,6 +631,9 @@ function describeSystemEvent(
       // Room-facing tombstone. When a moderator removed the message, the relay
       // stamps a sanitized public_reason; a plain self-delete carries none. The
       // content and the reporter are never disclosed here.
+      if (hideTombstones) {
+        return null;
+      }
       if (payload.public_reason) {
         return {
           title: "Removed by community moderators",
@@ -649,6 +653,8 @@ function describeSystemEvent(
 export const SystemMessageRow = React.memo(function SystemMessageRow({
   message,
   groupedMessages,
+  channelId,
+  hideTombstonesChannelIds,
   currentPubkey,
   agentPubkeys,
   profiles,
@@ -658,6 +664,12 @@ export const SystemMessageRow = React.memo(function SystemMessageRow({
 }: {
   message: TimelineMessage;
   groupedMessages?: TimelineMessage[];
+  /** Used with hideTombstonesChannelIds to look up this channel's "hide
+   * deletion notices" preference — a plain prop (set once, high up, where
+   * CommunitiesProvider is guaranteed) rather than a hook call here, so this
+   * component stays renderable standalone (e.g. in isolation in tests). */
+  channelId?: string | null;
+  hideTombstonesChannelIds?: ReadonlySet<string>;
   currentPubkey?: string;
   agentPubkeys?: ReadonlySet<string>;
   profiles?: UserProfileLookup;
@@ -670,6 +682,9 @@ export const SystemMessageRow = React.memo(function SystemMessageRow({
     remove: boolean,
   ) => Promise<void>;
 }) {
+  const hideTombstones = Boolean(
+    channelId && hideTombstonesChannelIds?.has(channelId),
+  );
   const sourceMessages = React.useMemo(
     () => groupedMessages ?? [message],
     [groupedMessages, message],
@@ -735,6 +750,7 @@ export const SystemMessageRow = React.memo(function SystemMessageRow({
     profiles,
     personaLookup,
     agentPubkeys,
+    hideTombstones,
   );
   if (!description) {
     return null;

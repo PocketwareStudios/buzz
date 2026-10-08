@@ -44,13 +44,14 @@ export const KIND_HUDDLE_ENDED = 48103;
 export const KIND_HUDDLE_LIVENESS = 48104;
 // NIP-78 application-specific data. All use kind 30078; the relay
 // differentiates them by d-tag ("read-state:<slotId>", "channel-sections",
-// "channel-mutes", "channel-stars", "channel-unread-counts", "channel-sort",
-// "project-sidebar-membership").
+// "channel-mutes", "channel-stars", "channel-unread-counts",
+// "channel-hide-tombstones", "channel-sort", "project-sidebar-membership").
 export const KIND_READ_STATE = 30078;
 export const KIND_CHANNEL_SECTIONS = 30078;
 export const KIND_CHANNEL_MUTES = 30078;
 export const KIND_CHANNEL_STARS = 30078;
 export const KIND_CHANNEL_UNREAD_COUNTS = 30078;
+export const KIND_CHANNEL_HIDE_TOMBSTONES = 30078;
 export const KIND_CHANNEL_SORT = 30078;
 export const KIND_PROJECT_SIDEBAR_MEMBERSHIP = 30078;
 export const KIND_COMMUNITY_THEME = 30078;

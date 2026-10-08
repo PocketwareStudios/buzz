@@ -60,6 +60,29 @@ function memberLeftMessage({ actor, createdAt = 1, id, reactions = [] }) {
   };
 }
 
+function deletedMessage({
+  actor,
+  createdAt = 1,
+  id,
+  publicReason,
+  reactions = [],
+}) {
+  return {
+    author: "System",
+    body: JSON.stringify({
+      type: "message_deleted",
+      actor,
+      public_reason: publicReason,
+    }),
+    createdAt,
+    depth: 0,
+    id,
+    kind: 40099,
+    reactions,
+    time: "12:00 PM",
+  };
+}
+
 function reaction(emoji, { reactedByCurrentUser = false } = {}) {
   return {
     emoji,
@@ -87,8 +110,10 @@ function normalizeText(text) {
 }
 
 async function renderSystemMessageRow({
+  channelId,
   currentPubkey = "viewer",
   groupedMessages,
+  hideTombstonesChannelIds,
   message = groupedMessages[0],
   onToggleReaction,
   profiles,
@@ -110,8 +135,10 @@ async function renderSystemMessageRow({
         TooltipProvider,
         null,
         createElement(SystemMessageRow, {
+          channelId,
           currentPubkey,
           groupedMessages,
+          hideTombstonesChannelIds,
           message,
           onToggleReaction,
           profiles,
@@ -564,4 +591,56 @@ test("removing a reaction from a duplicate self-join lifecycle group targets eve
     ["a", "👍"],
     ["c", "👍"],
   ]);
+});
+
+test("a deleted message renders a tombstone by default", async () => {
+  const { screen } = await import("@testing-library/react");
+  const actor = "21".repeat(32);
+
+  await renderSystemMessageRow({
+    channelId: "chan-1",
+    groupedMessages: [deletedMessage({ actor, id: "a" })],
+  });
+
+  const row = screen.getByTestId("system-message-row");
+  assert.match(normalizeText(row.textContent ?? ""), /removed a message/);
+});
+
+test("a deleted message's tombstone is suppressed for a channel that opted out", async () => {
+  const { screen } = await import("@testing-library/react");
+  const actor = "22".repeat(32);
+
+  await renderSystemMessageRow({
+    channelId: "chan-1",
+    hideTombstonesChannelIds: new Set(["chan-1"]),
+    groupedMessages: [deletedMessage({ actor, id: "a" })],
+  });
+
+  assert.equal(screen.queryByTestId("system-message-row"), null);
+});
+
+test("a deleted message's tombstone still renders for a channel not in the opt-out set", async () => {
+  const { screen } = await import("@testing-library/react");
+  const actor = "23".repeat(32);
+
+  await renderSystemMessageRow({
+    channelId: "chan-2",
+    hideTombstonesChannelIds: new Set(["chan-1"]),
+    groupedMessages: [deletedMessage({ actor, id: "a" })],
+  });
+
+  assert.ok(screen.getByTestId("system-message-row"));
+});
+
+test("a moderator removal's tombstone is also suppressed for an opted-out channel", async () => {
+  const { screen } = await import("@testing-library/react");
+  const actor = "24".repeat(32);
+
+  await renderSystemMessageRow({
+    channelId: "chan-1",
+    hideTombstonesChannelIds: new Set(["chan-1"]),
+    groupedMessages: [deletedMessage({ actor, id: "a", publicReason: "spam" })],
+  });
+
+  assert.equal(screen.queryByTestId("system-message-row"), null);
 });

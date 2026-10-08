@@ -375,6 +375,9 @@ export function ChannelGroupSection({
   unreadCountChannelIds,
   onShowUnreadCount,
   onHideUnreadCount,
+  hideTombstonesChannelIds,
+  onHideTombstones,
+  onShowTombstones,
   onDeleteChannel,
   onLeaveChannel,
 }: {
@@ -428,6 +431,9 @@ export function ChannelGroupSection({
   unreadCountChannelIds?: ReadonlySet<string>;
   onShowUnreadCount?: (channelId: string) => void;
   onHideUnreadCount?: (channelId: string) => void;
+  hideTombstonesChannelIds?: ReadonlySet<string>;
+  onHideTombstones?: (channelId: string) => void;
+  onShowTombstones?: (channelId: string) => void;
   onDeleteChannel?: (channel: Channel) => void;
   onLeaveChannel?: (channel: Channel) => void;
 }) {
@@ -485,6 +491,7 @@ export function ChannelGroupSection({
                 isMuted={mutedChannelIds?.has(channel.id)}
                 isStarred={starredChannelIds?.has(channel.id)}
                 showsUnreadCount={unreadCountChannelIds?.has(channel.id)}
+                hidesTombstones={hideTombstonesChannelIds?.has(channel.id)}
                 sections={sections}
                 assignments={assignments}
                 onMarkChannelRead={onMarkChannelRead}
@@ -495,6 +502,8 @@ export function ChannelGroupSection({
                 onUnstarChannel={onUnstarChannel}
                 onShowUnreadCount={onShowUnreadCount}
                 onHideUnreadCount={onHideUnreadCount}
+                onHideTombstones={onHideTombstones}
+                onShowTombstones={onShowTombstones}
                 onAssignChannel={onAssignChannel}
                 onUnassignChannel={onUnassignChannel}
                 onCreateSectionForChannel={onCreateSectionForChannel}
@@ -596,6 +605,9 @@ export function CustomChannelSection({
   unreadCountChannelIds,
   onShowUnreadCount,
   onHideUnreadCount,
+  hideTombstonesChannelIds,
+  onHideTombstones,
+  onShowTombstones,
   onDeleteChannel,
   onLeaveChannel,
 }: {
@@ -639,6 +651,9 @@ export function CustomChannelSection({
   unreadCountChannelIds?: ReadonlySet<string>;
   onShowUnreadCount?: (channelId: string) => void;
   onHideUnreadCount?: (channelId: string) => void;
+  hideTombstonesChannelIds?: ReadonlySet<string>;
+  onHideTombstones?: (channelId: string) => void;
+  onShowTombstones?: (channelId: string) => void;
   onDeleteChannel?: (channel: Channel) => void;
   onLeaveChannel?: (channel: Channel) => void;
 }) {
@@ -792,6 +807,9 @@ export function CustomChannelSection({
                             showsUnreadCount={unreadCountChannelIds?.has(
                               channel.id,
                             )}
+                            hidesTombstones={hideTombstonesChannelIds?.has(
+                              channel.id,
+                            )}
                             sections={sections}
                             assignments={assignments}
                             onMarkChannelRead={onMarkChannelRead}
@@ -802,6 +820,8 @@ export function CustomChannelSection({
                             onUnstarChannel={onUnstarChannel}
                             onShowUnreadCount={onShowUnreadCount}
                             onHideUnreadCount={onHideUnreadCount}
+                            onHideTombstones={onHideTombstones}
+                            onShowTombstones={onShowTombstones}
                             onAssignChannel={onAssignChannel}
                             onUnassignChannel={onUnassignChannel}
                             onCreateSectionForChannel={

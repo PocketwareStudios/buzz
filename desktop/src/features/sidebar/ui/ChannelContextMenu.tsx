@@ -6,6 +6,8 @@ import {
   CheckCircle2,
   CircleDot,
   Copy,
+  Eye,
+  EyeOff,
   ListOrdered,
   ListX,
   LogOut,
@@ -147,6 +149,7 @@ export function ChannelContextMenuItems({
   isMuted,
   isStarred,
   showsUnreadCount,
+  hidesTombstones,
   sections,
   assignments,
   onMarkChannelRead,
@@ -157,6 +160,8 @@ export function ChannelContextMenuItems({
   onUnstarChannel,
   onShowUnreadCount,
   onHideUnreadCount,
+  onHideTombstones,
+  onShowTombstones,
   onAssignChannel,
   onUnassignChannel,
   onCreateSectionForChannel,
@@ -168,6 +173,7 @@ export function ChannelContextMenuItems({
   isMuted?: boolean;
   isStarred?: boolean;
   showsUnreadCount?: boolean;
+  hidesTombstones?: boolean;
   sections?: ChannelSection[];
   assignments?: Record<string, string>;
   onMarkChannelRead?: (
@@ -181,6 +187,8 @@ export function ChannelContextMenuItems({
   onUnstarChannel?: (channelId: string) => void;
   onShowUnreadCount?: (channelId: string) => void;
   onHideUnreadCount?: (channelId: string) => void;
+  onHideTombstones?: (channelId: string) => void;
+  onShowTombstones?: (channelId: string) => void;
   onAssignChannel?: (channelId: string, sectionId: string) => void;
   onUnassignChannel?: (channelId: string) => void;
   onCreateSectionForChannel?: (channelId: string) => void;
@@ -237,6 +245,7 @@ export function ChannelContextMenuItems({
   const showUnreadCountToggle =
     channel.channelType !== "dm" &&
     Boolean(onShowUnreadCount && onHideUnreadCount);
+  const showTombstoneToggle = Boolean(onHideTombstones && onShowTombstones);
   const showMove = Boolean(
     sections &&
       assignments &&
@@ -287,7 +296,10 @@ export function ChannelContextMenuItems({
           <span>Mark unread</span>
         </ContextMenuItem>
       ) : null}
-      {showMuteToggle || showStar || showUnreadCountToggle ? (
+      {showMuteToggle ||
+      showStar ||
+      showUnreadCountToggle ||
+      showTombstoneToggle ? (
         <ContextMenuSeparator />
       ) : null}
       {showMuteToggle ? (
@@ -358,6 +370,31 @@ export function ChannelContextMenuItems({
               <ListOrdered className="h-4 w-4" />
             </ContextMenuIconSlot>
             <span>Show unread count</span>
+          </ContextMenuItem>
+        )
+      ) : null}
+      {showTombstoneToggle ? (
+        hidesTombstones ? (
+          <ContextMenuItem
+            onSelect={() =>
+              deferMenuAction(() => onShowTombstones?.(channel.id))
+            }
+          >
+            <ContextMenuIconSlot>
+              <Eye className="h-4 w-4" />
+            </ContextMenuIconSlot>
+            <span>Show "message removed" notices</span>
+          </ContextMenuItem>
+        ) : (
+          <ContextMenuItem
+            onSelect={() =>
+              deferMenuAction(() => onHideTombstones?.(channel.id))
+            }
+          >
+            <ContextMenuIconSlot>
+              <EyeOff className="h-4 w-4" />
+            </ContextMenuIconSlot>
+            <span>Hide "message removed" notices</span>
           </ContextMenuItem>
         )
       ) : null}

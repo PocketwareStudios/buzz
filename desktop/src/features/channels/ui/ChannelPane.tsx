@@ -87,6 +87,7 @@ export const ChannelPane = React.memo(function ChannelPane({
   botTypingEntries,
   channelManagementOpen = false,
   currentPubkey,
+  hideTombstonesChannelIds,
   editTarget = null,
   fetchOlder,
   header,
@@ -637,6 +638,7 @@ export const ChannelPane = React.memo(function ChannelPane({
             <MessageTimeline
               ref={messageTimelineRef}
               channelId={activeChannel?.id}
+              hideTombstonesChannelIds={hideTombstonesChannelIds}
               onBelowViewportCountChange={handleBelowViewportCountChange}
               channelIntro={channelIntro}
               directMessageIntro={directMessageIntro}

@@ -52,6 +52,7 @@ export type TimelineVirtualizerApi = {
 
 type TimelineMessageListProps = {
   channelId?: string | null;
+  hideTombstonesChannelIds?: ReadonlySet<string>;
   channelName?: string;
   channelType?: ChannelType | null;
   currentPubkey?: string;
@@ -132,6 +133,7 @@ type TimelineMessageListProps = {
 
 export const TimelineMessageList = React.memo(function TimelineMessageList({
   channelId,
+  hideTombstonesChannelIds,
   channelName,
   channelType,
   currentPubkey,
@@ -228,6 +230,8 @@ export const TimelineMessageList = React.memo(function TimelineMessageList({
         case "system":
           return (
             <SystemRow
+              channelId={channelId}
+              hideTombstonesChannelIds={hideTombstonesChannelIds}
               currentPubkey={currentPubkey}
               entry={item.entry}
               footer={messageFooters?.[item.entry.message.id] ?? null}
@@ -239,6 +243,8 @@ export const TimelineMessageList = React.memo(function TimelineMessageList({
         case "system-group":
           return (
             <SystemRow
+              channelId={channelId}
+              hideTombstonesChannelIds={hideTombstonesChannelIds}
               currentPubkey={currentPubkey}
               entries={item.entries}
               footer={item.entries.map(
@@ -295,6 +301,7 @@ export const TimelineMessageList = React.memo(function TimelineMessageList({
     },
     [
       channelId,
+      hideTombstonesChannelIds,
       alwaysShowMessageIdentity,
       currentPubkey,
       followThreadById,

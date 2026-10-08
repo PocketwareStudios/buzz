@@ -33,6 +33,7 @@ import { useWelcomeKickoffEntrance } from "@/features/onboarding/useWelcomeKicko
 import { useWelcomeKickoffStagePresence } from "@/features/onboarding/useWelcomeKickoffStagePresence";
 import { useWelcomeAgentCreate } from "@/features/channels/useWelcomeAgentCreate";
 import { useCommunities } from "@/features/communities/useCommunities";
+import { useChannelHideTombstones } from "@/features/sidebar/lib/useChannelHideTombstones";
 import {
   useChannelMessagesQuery,
   useChannelSubscription,
@@ -169,6 +170,10 @@ export function ChannelScreen({
   }, []);
   const mainInsetRef = useMainInsetRef();
   const currentPubkey = currentIdentity?.pubkey;
+  const { hideTombstonesChannelIds } = useChannelHideTombstones(
+    currentPubkey,
+    activeCommunity?.relayUrl,
+  );
   const activeChannelId = activeChannel?.id ?? null;
   const isHuddleTranscript = useIsHuddleTranscript(activeChannelId);
   const relaySelfPubkey = useRelaySelfQuery(activeChannel !== null).data;
@@ -850,6 +855,7 @@ export function ChannelScreen({
                   botTypingEntries={botTypingEntries}
                   channelManagementOpen={channelManagementOpen}
                   currentPubkey={currentPubkey}
+                  hideTombstonesChannelIds={hideTombstonesChannelIds}
                   canResetThreadPanelWidth={canResetThreadPanelWidth}
                   fetchOlder={fetchOlder}
                   header={channelHeader}

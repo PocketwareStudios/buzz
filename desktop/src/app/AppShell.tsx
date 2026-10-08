@@ -80,6 +80,7 @@ import { useReminderNotifications } from "@/features/reminders/useReminderNotifi
 import { AppSidebar } from "@/features/sidebar/ui/AppSidebar";
 import { requestFocusedThreadClose } from "@/features/channels/focusedThreadCloseRequest";
 import { CommunityRail } from "@/features/sidebar/ui/CommunityRail";
+import { useChannelHideTombstones } from "@/features/sidebar/lib/useChannelHideTombstones";
 import { useChannelMutes } from "@/features/sidebar/lib/useChannelMutes";
 import { useChannelStars } from "@/features/sidebar/lib/useChannelStars";
 import { useChannelUnreadCounts } from "@/features/sidebar/lib/useChannelUnreadCounts";
@@ -202,6 +203,11 @@ export function AppShell() {
   );
   const { unreadCountChannelIds, showUnreadCount, hideUnreadCount } =
     useChannelUnreadCounts(
+      identityQuery.data?.pubkey,
+      communitiesHook.activeCommunity?.relayUrl,
+    );
+  const { hideTombstonesChannelIds, hideTombstones, showTombstones } =
+    useChannelHideTombstones(
       identityQuery.data?.pubkey,
       communitiesHook.activeCommunity?.relayUrl,
     );
@@ -978,6 +984,9 @@ export function AppShell() {
                           unreadCountChannelIds={unreadCountChannelIds}
                           onShowUnreadCount={showUnreadCount}
                           onHideUnreadCount={hideUnreadCount}
+                          hideTombstonesChannelIds={hideTombstonesChannelIds}
+                          onHideTombstones={hideTombstones}
+                          onShowTombstones={showTombstones}
                         />
                       ) : null}
                       <TerminalContextOverrideProvider

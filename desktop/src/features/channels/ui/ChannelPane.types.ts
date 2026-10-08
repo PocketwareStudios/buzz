@@ -37,6 +37,7 @@ export type ChannelPaneProps = {
   botTypingEntries: TypingIndicatorEntry[];
   channelManagementOpen?: boolean;
   currentPubkey?: string;
+  hideTombstonesChannelIds?: ReadonlySet<string>;
   editTarget?: MessageComposerEditTarget | null;
   fetchOlder?: () => Promise<void>;
   header?: React.ReactNode;

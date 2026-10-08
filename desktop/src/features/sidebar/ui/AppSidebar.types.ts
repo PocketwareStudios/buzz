@@ -116,4 +116,7 @@ export type AppSidebarProps = {
   unreadCountChannelIds?: ReadonlySet<string>;
   onShowUnreadCount?: (channelId: string) => void;
   onHideUnreadCount?: (channelId: string) => void;
+  hideTombstonesChannelIds?: ReadonlySet<string>;
+  onHideTombstones?: (channelId: string) => void;
+  onShowTombstones?: (channelId: string) => void;
 };
